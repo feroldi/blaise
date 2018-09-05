@@ -1,0 +1,41 @@
+
+#[derive(Debug)]
+pub enum Category {
+    Identifier,
+    Number,
+    StringLiteral,
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+    ExclamaEqual,
+    EqualEqual,
+    GreaterEqual,
+    Greater,
+    LesserEqual,
+    Lesser,
+    Star,
+    Slash,
+    Plus,
+    Minus,
+    Comma,
+    Colon,
+    Semi,
+    Let,
+    Int,
+    Bool,
+    Float,
+    Str,
+    Read,
+    Readln,
+    Write,
+    Writeln,
+    If,
+    Else,
+    While,
+}
+
+pub struct Token {
+    pub category: Category,
+    pub lexeme: String,
+}
