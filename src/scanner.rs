@@ -46,6 +46,7 @@ enum Category {
 struct Token {
     category: Category,
     location: BytePos,
+    lexeme: String,
 }
 
 struct Scanner<'a> {
@@ -81,55 +82,131 @@ impl<'a> Scanner<'a> {
         let location = self.location();
         let c = self.consume();
 
-        let category = match c {
-            '(' => Category::LParen,
-            ')' => Category::RParen,
-            '{' => Category::LBrace,
-            '}' => Category::RBrace,
+        let (category, lexeme) = match c {
+            '(' => (Category::LParen, "(".into()),
+            ')' => (Category::RParen, ")".into()),
+            '{' => (Category::LBrace, "{".into()),
+            '}' => (Category::RBrace, "}".into()),
             '!' => {
                 if '=' == self.peek() {
                     self.consume();
-                    Category::ExclamaEqual
+                    (Category::ExclamaEqual, "!=".into())
                 } else {
-                    Category::Exclama
+                    (Category::Exclama, "!".into())
                 }
             }
             '=' => {
                 if '=' == self.peek() {
                     self.consume();
-                    Category::EqualEqual
+                    (Category::EqualEqual, "==".into())
                 } else {
-                    Category::Equal
+                    (Category::Equal, "=".into())
                 }
             }
             '>' => {
                 if '=' == self.peek() {
                     self.consume();
-                    Category::GreaterEqual
+                    (Category::GreaterEqual, ">=".into())
                 } else {
-                    Category::Greater
+                    (Category::Greater, ">".into())
                 }
             }
             '<' => {
                 if '=' == self.peek() {
                     self.consume();
-                    Category::LesserEqual
+                    (Category::LesserEqual, "<=".into())
                 } else {
-                    Category::Lesser
+                    (Category::Lesser, "<".into())
                 }
             }
-            '*' => Category::Star,
-            '/' => Category::Slash,
-            '+' => Category::Plus,
-            '-' => Category::Minus,
-            ',' => Category::Comma,
-            ':' => Category::Colon,
-            ';' => Category::Semi,
-            '\0' => Category::Eof,
-            _ => Category::Unknown,
+            '*' => (Category::Star, "*".into()),
+            '/' => (Category::Slash, "/".into()),
+            '+' => (Category::Plus, "+".into()),
+            '-' => (Category::Minus, "-".into()),
+            ',' => (Category::Comma, ",".into()),
+            ':' => (Category::Colon, ":".into()),
+            ';' => (Category::Semi, ";".into()),
+            _ if c.is_alphabetic() => {
+                let mut lexeme = String::new();
+                lexeme.push(c);
+                while self.peek().is_alphanumeric() {
+                    lexeme.push(self.consume());
+                }
+                let category = match lexeme.as_ref() {
+                    "let" => Category::Let,
+                    "int" => Category::Int,
+                    "bool" => Category::Bool,
+                    "float" => Category::Float,
+                    "str" => Category::Str,
+                    "read" => Category::Read,
+                    "readln" => Category::Readln,
+                    "write" => Category::Write,
+                    "writeln" => Category::Writeln,
+                    "if" => Category::If,
+                    "else" => Category::Else,
+                    "while" => Category::While,
+                    _ => Category::Identifier,
+                };
+                (category, lexeme)
+            }
+            _ if c.is_digit(10) => {
+                let mut lexeme = String::new();
+                let mut had_error = false;
+                lexeme.push(c);
+                while self.peek().is_digit(10) {
+                    lexeme.push(self.consume());
+                }
+                if '.' == self.peek() {
+                    lexeme.push(self.consume());
+                    while self.peek().is_digit(10) {
+                        lexeme.push(self.consume());
+                    }
+                }
+                if 'e' == self.peek() || 'E' == self.peek() {
+                    lexeme.push(self.consume());
+                    if '+' == self.peek() || '-' == self.peek() {
+                        lexeme.push(self.consume());
+                    }
+                    if self.peek().is_digit(10) {
+                        lexeme.push(self.consume());
+                        while self.peek().is_digit(10) {
+                            lexeme.push(self.consume());
+                        }
+                    } else {
+                        had_error = true;
+                    }
+                }
+                (
+                    if !had_error {
+                        Category::Number
+                    } else {
+                        Category::Unknown
+                    },
+                    lexeme,
+                )
+            },
+            '"' => {
+                let mut lexeme = String::new();
+                lexeme.push(c);
+                while '"' != self.peek() && '\0' != self.peek() {
+                    lexeme.push(self.consume());
+                }
+                if '"' == self.peek() {
+                    lexeme.push(self.consume());
+                    (Category::StringLiteral, lexeme)
+                } else {
+                    (Category::Unknown, lexeme)
+                }
+            },
+            '\0' => (Category::Eof, "<end of input>".into()),
+            _ => (Category::Unknown, format!("{}", c)),
         };
 
-        Token { category, location }
+        Token {
+            category,
+            location,
+            lexeme,
+        }
     }
 }
 
@@ -162,6 +239,7 @@ mod tests {
             Token {
                 category: Category::LParen,
                 location: BytePos(0),
+                lexeme: "(".into(),
             },
             scanner.next()
         );
@@ -169,6 +247,7 @@ mod tests {
             Token {
                 category: Category::RParen,
                 location: BytePos(2),
+                lexeme: ")".into(),
             },
             scanner.next()
         );
@@ -176,6 +255,7 @@ mod tests {
             Token {
                 category: Category::LBrace,
                 location: BytePos(4),
+                lexeme: "{".into(),
             },
             scanner.next()
         );
@@ -183,6 +263,7 @@ mod tests {
             Token {
                 category: Category::RBrace,
                 location: BytePos(6),
+                lexeme: "}".into(),
             },
             scanner.next()
         );
@@ -190,6 +271,7 @@ mod tests {
             Token {
                 category: Category::ExclamaEqual,
                 location: BytePos(8),
+                lexeme: "!=".into(),
             },
             scanner.next()
         );
@@ -197,6 +279,7 @@ mod tests {
             Token {
                 category: Category::EqualEqual,
                 location: BytePos(11),
+                lexeme: "==".into(),
             },
             scanner.next()
         );
@@ -204,6 +287,7 @@ mod tests {
             Token {
                 category: Category::Equal,
                 location: BytePos(14),
+                lexeme: "=".into(),
             },
             scanner.next()
         );
@@ -211,6 +295,7 @@ mod tests {
             Token {
                 category: Category::GreaterEqual,
                 location: BytePos(16),
+                lexeme: ">=".into(),
             },
             scanner.next()
         );
@@ -218,6 +303,7 @@ mod tests {
             Token {
                 category: Category::Greater,
                 location: BytePos(19),
+                lexeme: ">".into(),
             },
             scanner.next()
         );
@@ -225,6 +311,7 @@ mod tests {
             Token {
                 category: Category::LesserEqual,
                 location: BytePos(21),
+                lexeme: "<=".into(),
             },
             scanner.next()
         );
@@ -232,6 +319,7 @@ mod tests {
             Token {
                 category: Category::Lesser,
                 location: BytePos(24),
+                lexeme: "<".into(),
             },
             scanner.next()
         );
@@ -239,6 +327,7 @@ mod tests {
             Token {
                 category: Category::Star,
                 location: BytePos(26),
+                lexeme: "*".into(),
             },
             scanner.next()
         );
@@ -246,6 +335,7 @@ mod tests {
             Token {
                 category: Category::Slash,
                 location: BytePos(28),
+                lexeme: "/".into(),
             },
             scanner.next()
         );
@@ -253,6 +343,7 @@ mod tests {
             Token {
                 category: Category::Plus,
                 location: BytePos(30),
+                lexeme: "+".into(),
             },
             scanner.next()
         );
@@ -260,6 +351,7 @@ mod tests {
             Token {
                 category: Category::Minus,
                 location: BytePos(32),
+                lexeme: "-".into(),
             },
             scanner.next()
         );
@@ -267,6 +359,7 @@ mod tests {
             Token {
                 category: Category::Comma,
                 location: BytePos(34),
+                lexeme: ",".into(),
             },
             scanner.next()
         );
@@ -274,6 +367,7 @@ mod tests {
             Token {
                 category: Category::Colon,
                 location: BytePos(36),
+                lexeme: ":".into(),
             },
             scanner.next()
         );
@@ -281,6 +375,7 @@ mod tests {
             Token {
                 category: Category::Semi,
                 location: BytePos(38),
+                lexeme: ";".into(),
             },
             scanner.next()
         );
@@ -288,8 +383,126 @@ mod tests {
             Token {
                 category: Category::Eof,
                 location: BytePos::invalid(),
+                lexeme: "<end of input>".into(),
             },
             scanner.next()
         );
+    }
+
+    #[test]
+    fn identifiers() {
+        let mut scanner = Scanner::with_str("a abc abc123 123abc");
+
+        let tok = scanner.next();
+        assert_eq!(Category::Identifier, tok.category);
+        assert_eq!("a", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Identifier, tok.category);
+        assert_eq!("abc", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Identifier, tok.category);
+        assert_eq!("abc123", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Number, tok.category);
+        assert_eq!("123", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Identifier, tok.category);
+        assert_eq!("abc", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Eof, tok.category);
+    }
+
+    #[test]
+    fn keywords() {
+        let mut scanner =
+            Scanner::with_str("let int bool float str read readln write writeln if else while whileif");
+
+        let tok = scanner.next();
+        assert_eq!(Category::Let, tok.category);
+        assert_eq!("let", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Int, tok.category);
+        assert_eq!("int", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Bool, tok.category);
+        assert_eq!("bool", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Float, tok.category);
+        assert_eq!("float", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Str, tok.category);
+        assert_eq!("str", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Read, tok.category);
+        assert_eq!("read", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Readln, tok.category);
+        assert_eq!("readln", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Write, tok.category);
+        assert_eq!("write", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Writeln, tok.category);
+        assert_eq!("writeln", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::If, tok.category);
+        assert_eq!("if", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Else, tok.category);
+        assert_eq!("else", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::While, tok.category);
+        assert_eq!("while", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Identifier, tok.category);
+        assert_eq!("whileif", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Eof, tok.category);
+    }
+
+    #[test]
+    fn string_literals() {
+        let mut scanner = Scanner::with_str("\"\" \"foo bar 123 !!!\"");
+
+        let tok = scanner.next();
+        assert_eq!(Category::StringLiteral, tok.category);
+        assert_eq!("\"\"", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::StringLiteral, tok.category);
+        assert_eq!("\"foo bar 123 !!!\"", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Eof, tok.category);
+    }
+
+    #[test]
+    fn nonterminating_string_literal() {
+        let mut scanner = Scanner::with_str("\"abc");
+
+        let tok = scanner.next();
+        assert_eq!(Category::Unknown, tok.category);
+        assert_eq!("\"abc", tok.lexeme);
+
+        let tok = scanner.next();
+        assert_eq!(Category::Eof, tok.category);
     }
 }
