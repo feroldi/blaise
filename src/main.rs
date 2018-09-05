@@ -1,8 +1,8 @@
-use scanner::Category;
+#![feature(universal_impl_trait)]
 
+mod codemap;
 mod scanner;
 
 fn main() {
-    let c = Category::Semi;
-    println!("Hello, {:?}!", c);
+    println!("Hello, World!");
 }
