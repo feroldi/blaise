@@ -4,6 +4,12 @@ use std::ops::Sub;
 #[derive(Debug, PartialEq, Eq)]
 pub struct BytePos(pub usize);
 
+impl BytePos {
+    pub fn invalid() -> BytePos {
+        BytePos(<usize>::max_value())
+    }
+}
+
 impl Add for BytePos {
     type Output = BytePos;
 
