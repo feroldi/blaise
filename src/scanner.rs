@@ -175,6 +175,12 @@ impl<'a> Scanner<'a> {
                         had_error = true;
                     }
                 }
+                if self.peek().is_alphabetic() {
+                    had_error = true;
+                    while self.peek().is_alphanumeric() {
+                        lexeme.push(self.consume());
+                    }
+                }
                 if !had_error {
                     Category::Number
                 } else {
@@ -400,12 +406,8 @@ mod tests {
         assert_eq!("abc123", tok.lexeme);
 
         let tok = scanner.next();
-        assert_eq!(Category::Number, tok.category);
-        assert_eq!("123", tok.lexeme);
-
-        let tok = scanner.next();
-        assert_eq!(Category::Identifier, tok.category);
-        assert_eq!("abc", tok.lexeme);
+        assert_eq!(Category::Unknown, tok.category);
+        assert_eq!("123abc", tok.lexeme);
 
         let tok = scanner.next();
         assert_eq!(Category::Eof, tok.category);
