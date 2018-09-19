@@ -1,6 +1,7 @@
 #![feature(universal_impl_trait)]
+#![feature(dotdoteq_in_patterns)]
 
-mod codemap;
+mod srcmap;
 mod scanner;
 
 fn main() {
