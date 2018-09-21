@@ -1,5 +1,6 @@
 use srcmap;
-use srcmap::{BytePos, Pos, SourceMap, Span};
+use srcmap::{BytePos, Pos, SourceFile, Span};
+use std::rc::Rc;
 
 /// The syntactic category of a token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,9 +47,9 @@ struct TokenAndSpan {
     sp: Span,
 }
 
-struct Scanner<'a> {
-    source_map: &'a SourceMap,
-    src: &'a str,
+struct Scanner {
+    source_file: Rc<SourceFile>,
+    src: Rc<String>,
     ch: Option<char>,
     pos: BytePos,
     next_pos: BytePos,
@@ -56,11 +57,13 @@ struct Scanner<'a> {
     peek_span: Span,
 }
 
-impl<'a> Scanner<'a> {
-    fn new(source_map: &'a SourceMap) -> Scanner {
+impl Scanner {
+    fn new(source_file: Rc<SourceFile>) -> Scanner {
+        let src = source_file.src.clone();
+
         let mut sc = Scanner {
-            source_map,
-            src: source_map.src.as_ref(),
+            source_file,
+            src,
             ch: Some('\n'),
             pos: Pos::from_usize(0),
             next_pos: Pos::from_usize(0),
@@ -215,7 +218,7 @@ impl<'a> Scanner<'a> {
                     self.bump();
                 }
 
-                let tok = match self.source_map.span_to_snippet(Span {
+                let tok = match self.source_file.span_to_snippet(Span {
                     start: start_bytepos,
                     end: self.pos,
                 }) {
@@ -320,16 +323,20 @@ fn is_whitespace(c: Option<char>) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{Scanner, SourceMap, Token, TokenAndSpan};
+mod test {
+    use super::{Scanner, SourceFile, Token, TokenAndSpan};
+    use std::rc::Rc;
+
+    fn create_scanner(src: &str) -> (Scanner, Rc<SourceFile>) {
+        let file = Rc::new(SourceFile::new("test".into(), src.into()));
+        let scanner = Scanner::new(file.clone());
+        (scanner, file)
+    }
 
     #[test]
     fn scan_punctuators_test() {
-        let sm = SourceMap::new(
-            "test".into(),
-            "( ) { } != ! == = >= > <= < * / + - , : ;".into(),
-        );
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, _) =
+            create_scanner("( ) { } != ! == = >= > <= < * / + - , : ;");
 
         assert_eq!(Token::LParen, sc.next_token().tok);
         assert_eq!(Token::RParen, sc.next_token().tok);
@@ -355,33 +362,31 @@ mod tests {
 
     #[test]
     fn scan_identifiers_test() {
-        let sm =
-            SourceMap::new("test".into(), "a abc abc123 123abc _a_".into());
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, sf) = create_scanner("a abc abc123 123abc _a_");
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Identifier, tok);
-        assert_eq!("a", sm.span_to_snippet(sp));
+        assert_eq!("a", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Identifier, tok);
-        assert_eq!("abc", sm.span_to_snippet(sp));
+        assert_eq!("abc", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Identifier, tok);
-        assert_eq!("abc123", sm.span_to_snippet(sp));
+        assert_eq!("abc123", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("123", sm.span_to_snippet(sp));
+        assert_eq!("123", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Identifier, tok);
-        assert_eq!("abc", sm.span_to_snippet(sp));
+        assert_eq!("abc", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Identifier, tok);
-        assert_eq!("_a_", sm.span_to_snippet(sp));
+        assert_eq!("_a_", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, .. } = sc.next_token();
         assert_eq!(Token::Eof, tok);
@@ -389,63 +394,59 @@ mod tests {
 
     #[test]
     fn scan_keywords_test() {
-        let sm = SourceMap::new(
-            "test".into(),
-            "let int bool float str read readln write writeln if else while whileif".into(),
-        );
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, sf) = create_scanner("let int bool float str read readln write writeln if else while whileif");
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Let, tok);
-        assert_eq!("let", sm.span_to_snippet(sp));
+        assert_eq!("let", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Int, tok);
-        assert_eq!("int", sm.span_to_snippet(sp));
+        assert_eq!("int", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Bool, tok);
-        assert_eq!("bool", sm.span_to_snippet(sp));
+        assert_eq!("bool", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Float, tok);
-        assert_eq!("float", sm.span_to_snippet(sp));
+        assert_eq!("float", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Str, tok);
-        assert_eq!("str", sm.span_to_snippet(sp));
+        assert_eq!("str", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Read, tok);
-        assert_eq!("read", sm.span_to_snippet(sp));
+        assert_eq!("read", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Readln, tok);
-        assert_eq!("readln", sm.span_to_snippet(sp));
+        assert_eq!("readln", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Write, tok);
-        assert_eq!("write", sm.span_to_snippet(sp));
+        assert_eq!("write", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Writeln, tok);
-        assert_eq!("writeln", sm.span_to_snippet(sp));
+        assert_eq!("writeln", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::If, tok);
-        assert_eq!("if", sm.span_to_snippet(sp));
+        assert_eq!("if", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Else, tok);
-        assert_eq!("else", sm.span_to_snippet(sp));
+        assert_eq!("else", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::While, tok);
-        assert_eq!("while", sm.span_to_snippet(sp));
+        assert_eq!("while", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Identifier, tok);
-        assert_eq!("whileif", sm.span_to_snippet(sp));
+        assert_eq!("whileif", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, .. } = sc.next_token();
         assert_eq!(Token::Eof, tok);
@@ -453,19 +454,15 @@ mod tests {
 
     #[test]
     fn scan_string_literals_test() {
-        let sm = SourceMap::new(
-            "test".into(),
-            "\"\" \"foo bar 123 !!!\"".into(),
-        );
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, sf) = create_scanner("\"\" \"foo bar 123 !!!\"");
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::StringLiteral, tok);
-        assert_eq!("\"\"", sm.span_to_snippet(sp));
+        assert_eq!("\"\"", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::StringLiteral, tok);
-        assert_eq!("\"foo bar 123 !!!\"", sm.span_to_snippet(sp));
+        assert_eq!("\"foo bar 123 !!!\"", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, .. } = sc.next_token();
         assert_eq!(Token::Eof, tok);
@@ -473,11 +470,7 @@ mod tests {
 
     #[test]
     fn nonterminating_string_literal_test() {
-        let sm = SourceMap::new(
-            "test".into(),
-            "\"abc".into(),
-        );
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, _) = create_scanner("\"abc");
 
         let tok = sc.try_next_token();
         assert!(tok.is_err());
@@ -488,11 +481,7 @@ mod tests {
 
     #[test]
     fn invalid_newline_in_string_literal_test() {
-        let sm = SourceMap::new(
-            "test".into(),
-            "\"abc\n\"".into(),
-        );
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, _) = create_scanner("\"abc\n\"");
 
         // Scans the first string.
         let tok = sc.try_next_token();
@@ -508,51 +497,48 @@ mod tests {
 
     #[test]
     fn scan_numbers_test() {
-        let sm = SourceMap::new(
-            "test".into(),
-            "0 0123 3.14 3.14e42 0e0 0E0 0e+0 0e-0 0E+0 0E-0".into(),
-        );
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, sf) =
+            create_scanner("0 0123 3.14 3.14e42 0e0 0E0 0e+0 0e-0 0E+0 0E-0");
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0", sm.span_to_snippet(sp));
+        assert_eq!("0", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0123", sm.span_to_snippet(sp));
+        assert_eq!("0123", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("3.14", sm.span_to_snippet(sp));
+        assert_eq!("3.14", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("3.14e42", sm.span_to_snippet(sp));
+        assert_eq!("3.14e42", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0e0", sm.span_to_snippet(sp));
+        assert_eq!("0e0", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0E0", sm.span_to_snippet(sp));
+        assert_eq!("0E0", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0e+0", sm.span_to_snippet(sp));
+        assert_eq!("0e+0", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0e-0", sm.span_to_snippet(sp));
+        assert_eq!("0e-0", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0E+0", sm.span_to_snippet(sp));
+        assert_eq!("0E+0", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Number, tok);
-        assert_eq!("0E-0", sm.span_to_snippet(sp));
+        assert_eq!("0E-0", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, .. } = sc.next_token();
         assert_eq!(Token::Eof, tok);
@@ -560,11 +546,7 @@ mod tests {
 
     #[test]
     fn missing_exponent_digits_test() {
-        let sm = SourceMap::new(
-            "test".into(),
-            "0e".into(),
-        );
-        let mut sc = Scanner::new(&sm);
+        let (mut sc, _) = create_scanner("0e");
 
         let tok = sc.try_next_token();
         assert!(tok.is_err());

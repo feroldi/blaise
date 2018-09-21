@@ -1,4 +1,5 @@
 use std::ops::{Add, Sub};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct BytePos(pub usize);
@@ -46,28 +47,35 @@ impl Sub for BytePos {
     }
 }
 
+pub struct Loc {
+    source_file: Rc<SourceFile>,
+    line: usize,
+    col: BytePos,
+}
+
 /// Maps the content of a file into line and column positions.
-pub struct SourceMap {
+pub struct SourceFile {
     /// File's content.
-    pub src: String,
+    pub src: Rc<String>,
     /// Name of the loaded file.
-    file_name: String,
+    name: String,
     /// Byte positions following every new line.
     lines: Vec<BytePos>,
 }
 
-impl SourceMap {
-    pub fn new(file_name: String, src: String) -> SourceMap {
+impl SourceFile {
+    pub fn new(name: String, src: String) -> SourceFile {
         let mut lines = vec![BytePos(0)];
+
         for (i, b) in src.bytes().enumerate() {
             if b == b'\n' {
                 lines.push(BytePos(i + 1));
             }
         }
 
-        SourceMap {
-            src,
-            file_name,
+        SourceFile {
+            src: Rc::new(src),
+            name,
             lines,
         }
     }
@@ -83,20 +91,20 @@ mod tests {
 
     #[test]
     fn calc_line_positions() {
-        let source_map = SourceMap::new(
+        let source_file = SourceFile::new(
             "test".into(),
             "first line.\nsecond line.\nthird line.\n".into(),
         );
 
-        assert_eq!(BytePos(0), source_map.lines[0]);
-        assert_eq!(BytePos(12), source_map.lines[1]);
-        assert_eq!(BytePos(25), source_map.lines[2]);
-        assert_eq!(BytePos(37), source_map.lines[3]);
+        assert_eq!(BytePos(0), source_file.lines[0]);
+        assert_eq!(BytePos(12), source_file.lines[1]);
+        assert_eq!(BytePos(25), source_file.lines[2]);
+        assert_eq!(BytePos(37), source_file.lines[3]);
     }
 
     #[test]
     fn get_snippets_from_span() {
-        let source_map = SourceMap::new(
+        let source_file = SourceFile::new(
             "test".into(),
             "first line.\nsecond line.\nthird line.\n".into(),
         );
@@ -105,12 +113,12 @@ mod tests {
             start: BytePos(0),
             end: BytePos(5),
         };
-        assert_eq!("first", source_map.span_to_snippet(s));
+        assert_eq!("first", source_file.span_to_snippet(s));
 
         let s = Span {
             start: BytePos(12),
             end: BytePos(18),
         };
-        assert_eq!("second", source_map.span_to_snippet(s));
+        assert_eq!("second", source_file.span_to_snippet(s));
     }
 }
