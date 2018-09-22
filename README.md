@@ -1,6 +1,6 @@
-# Pust
+# Blaise
 
-Pust é o nome do projeto da disciplina de compiladores.
+Blaise é o nome do projeto da disciplina de compiladores.
 
 ## Gramática
 
