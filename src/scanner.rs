@@ -24,6 +24,7 @@ enum Token {
     Comma,
     Colon,
     Semi,
+    Program,
     Let,
     Int,
     Bool,
@@ -60,7 +61,6 @@ struct Scanner {
 impl Scanner {
     fn new(source_file: Rc<SourceFile>) -> Scanner {
         let src = source_file.src.clone();
-
         let mut sc = Scanner {
             source_file,
             src,
@@ -222,6 +222,7 @@ impl Scanner {
                     start: start_bytepos,
                     end: self.pos,
                 }) {
+                    "program" => Token::Program,
                     "let" => Token::Let,
                     "int" => Token::Int,
                     "bool" => Token::Bool,
@@ -394,7 +395,14 @@ mod test {
 
     #[test]
     fn scan_keywords_test() {
-        let (mut sc, sf) = create_scanner("let int bool float str read readln write writeln if else while whileif");
+        let (mut sc, sf) = create_scanner(
+            "program let int bool float str read readln \
+             write writeln if else while whileif",
+        );
+
+        let TokenAndSpan { tok, sp } = sc.next_token();
+        assert_eq!(Token::Program, tok);
+        assert_eq!("program", sf.span_to_snippet(sp));
 
         let TokenAndSpan { tok, sp } = sc.next_token();
         assert_eq!(Token::Let, tok);
