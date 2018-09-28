@@ -47,10 +47,10 @@ impl Sub for BytePos {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Loc {
-    source_file: Rc<SourceFile>,
-    line: usize,
-    col: BytePos,
+    pub line: usize,
+    pub col: BytePos,
 }
 
 /// Maps the content of a file into line and column positions.
@@ -73,6 +73,8 @@ impl SourceFile {
             }
         }
 
+        lines.push(BytePos(src.len()));
+
         SourceFile {
             src: Rc::new(src),
             name,
@@ -83,18 +85,43 @@ impl SourceFile {
     pub fn span_to_snippet(&self, s: Span) -> &str {
         &self.src[s.start.0..s.end.0]
     }
+
+    pub fn lookup_line_index(&self, pos: BytePos) -> Option<usize> {
+        let pos_index = pos.to_usize();
+        for (i, line_pos) in self.lines.iter().enumerate() {
+            let line_pos_index = line_pos.to_usize();
+            if pos_index < line_pos_index {
+                return Some(i - 1);
+            }
+        }
+
+        None
+    }
+
+    pub fn lookup_source_location(&self, pos: BytePos) -> Option<Loc> {
+        self.lookup_line_index(pos).map(|line_index| {
+            let line = line_index + 1;
+            let col = pos - self.lines[line_index];
+
+            Loc { line, col }
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn calc_line_positions() {
-        let source_file = SourceFile::new(
+    fn create_source_file() -> SourceFile {
+        SourceFile::new(
             "test".into(),
             "first line.\nsecond line.\nthird line.\n".into(),
-        );
+        )
+    }
+
+    #[test]
+    fn calc_line_positions_test() {
+        let source_file = create_source_file();
 
         assert_eq!(BytePos(0), source_file.lines[0]);
         assert_eq!(BytePos(12), source_file.lines[1]);
@@ -103,11 +130,8 @@ mod tests {
     }
 
     #[test]
-    fn get_snippets_from_span() {
-        let source_file = SourceFile::new(
-            "test".into(),
-            "first line.\nsecond line.\nthird line.\n".into(),
-        );
+    fn get_snippets_from_span_test() {
+        let source_file = create_source_file();
 
         let s = Span {
             start: BytePos(0),
@@ -120,5 +144,58 @@ mod tests {
             end: BytePos(18),
         };
         assert_eq!("second", source_file.span_to_snippet(s));
+    }
+
+    #[test]
+    fn lookup_line_indicies_test() {
+        let source_file = create_source_file();
+
+        assert_eq!(Some(0), source_file.lookup_line_index(BytePos(0)));
+        assert_eq!(Some(0), source_file.lookup_line_index(BytePos(1)));
+        assert_eq!(Some(1), source_file.lookup_line_index(BytePos(12)));
+        assert_eq!(Some(2), source_file.lookup_line_index(BytePos(25)));
+        assert_eq!(None, source_file.lookup_line_index(BytePos(37)));
+    }
+
+    #[test]
+    fn lookup_source_locations_test() {
+        let source_file = create_source_file();
+
+        assert_eq!(
+            Some(Loc {
+                line: 1,
+                col: BytePos(0),
+            }),
+            source_file.lookup_source_location(BytePos(0))
+        );
+
+        assert_eq!(
+            Some(Loc {
+                line: 1,
+                col: BytePos(3),
+            }),
+            source_file.lookup_source_location(BytePos(3))
+        );
+
+        assert_eq!(
+            Some(Loc {
+                line: 2,
+                col: BytePos(0),
+            }),
+            source_file.lookup_source_location(BytePos(12))
+        );
+
+        assert_eq!(
+            Some(Loc {
+                line: 2,
+                col: BytePos(3),
+            }),
+            source_file.lookup_source_location(BytePos(15))
+        );
+
+        assert_eq!(
+            None,
+            source_file.lookup_source_location(BytePos(37))
+        );
     }
 }

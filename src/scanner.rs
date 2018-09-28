@@ -1,5 +1,5 @@
-use srcmap;
-use srcmap::{BytePos, Pos, SourceFile, Span};
+use srcmap::{BytePos, Pos, SourceFile, Span, DUMMY_SPAN};
+use diagnostics::ReportCode;
 use std::rc::Rc;
 
 /// The syntactic category of a token.
@@ -43,6 +43,7 @@ enum Token {
     Eof,
 }
 
+#[derive(Debug)]
 struct TokenAndSpan {
     tok: Token,
     sp: Span,
@@ -68,7 +69,7 @@ impl Scanner {
             pos: Pos::from_usize(0),
             next_pos: Pos::from_usize(0),
             peek_tok: Token::Eof,
-            peek_span: srcmap::DUMMY_SPAN,
+            peek_span: DUMMY_SPAN,
         };
 
         sc.bump();
@@ -100,14 +101,14 @@ impl Scanner {
         }
     }
 
-    fn try_next_token(&mut self) -> Result<TokenAndSpan, ()> {
+    fn next_token(&mut self) -> Result<TokenAndSpan, ReportCode> {
         while is_whitespace(self.ch) {
             self.bump();
         }
 
         if self.is_eof() {
             self.peek_tok = Token::Eof;
-            self.peek_span = srcmap::DUMMY_SPAN;
+            self.peek_span = DUMMY_SPAN;
         } else {
             let tok_start_pos = self.pos;
             self.peek_tok = self.scan_token()?;
@@ -124,11 +125,7 @@ impl Scanner {
         })
     }
 
-    pub fn next_token(&mut self) -> TokenAndSpan {
-        self.try_next_token().unwrap()
-    }
-
-    fn scan_token(&mut self) -> Result<Token, ()> {
+    fn scan_token(&mut self) -> Result<Token, ReportCode> {
         match self.ch.expect("scan_token called on EOF") {
             '(' => {
                 self.bump();
@@ -263,7 +260,9 @@ impl Scanner {
                     }
 
                     if !is_dec_digit(self.ch) {
-                        return Err(());
+                        return Err(ReportCode::MissingExponentDigits {
+                            exp_pos: self.pos - BytePos(1),
+                        });
                     }
                 }
 
@@ -274,17 +273,18 @@ impl Scanner {
                 Ok(Token::Number)
             }
             '"' => {
+                let str_start_pos = self.pos;
                 self.bump();
 
-                while !(self.ch_is('"') || self.is_eof()) {
+                while !(self.ch_is('"') || self.ch_is('\n') || self.is_eof()) {
                     self.bump();
-                    if self.ch_is('\n') {
-                        return Err(());
-                    }
                 }
 
-                if self.is_eof() {
-                    return Err(());
+                if self.ch_is('\n') || self.is_eof() {
+                    return Err(ReportCode::MissingTerminatingStringMark {
+                        str_start_pos,
+                        eol_pos: self.pos,
+                    });
                 }
 
                 assert_eq!(Some('"'), self.ch);
@@ -293,8 +293,9 @@ impl Scanner {
                 Ok(Token::StringLiteral)
             }
             _ => {
+                let pos = self.pos;
                 self.bump();
-                Err(())
+                Err(ReportCode::UnknownCharacter { pos })
             }
         }
     }
@@ -325,7 +326,8 @@ fn is_whitespace(c: Option<char>) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{Scanner, SourceFile, Token, TokenAndSpan};
+    use super::{BytePos, Scanner, SourceFile, Token, TokenAndSpan};
+    use diagnostics::ReportCode;
     use std::rc::Rc;
 
     fn create_scanner(src: &str) -> (Scanner, Rc<SourceFile>) {
@@ -339,57 +341,57 @@ mod test {
         let (mut sc, _) =
             create_scanner("( ) { } != ! == = >= > <= < * / + - , : ;");
 
-        assert_eq!(Token::LParen, sc.next_token().tok);
-        assert_eq!(Token::RParen, sc.next_token().tok);
-        assert_eq!(Token::LBrace, sc.next_token().tok);
-        assert_eq!(Token::RBrace, sc.next_token().tok);
-        assert_eq!(Token::ExclamaEqual, sc.next_token().tok);
-        assert_eq!(Token::Exclama, sc.next_token().tok);
-        assert_eq!(Token::EqualEqual, sc.next_token().tok);
-        assert_eq!(Token::Equal, sc.next_token().tok);
-        assert_eq!(Token::GreaterEqual, sc.next_token().tok);
-        assert_eq!(Token::Greater, sc.next_token().tok);
-        assert_eq!(Token::LesserEqual, sc.next_token().tok);
-        assert_eq!(Token::Lesser, sc.next_token().tok);
-        assert_eq!(Token::Star, sc.next_token().tok);
-        assert_eq!(Token::Slash, sc.next_token().tok);
-        assert_eq!(Token::Plus, sc.next_token().tok);
-        assert_eq!(Token::Minus, sc.next_token().tok);
-        assert_eq!(Token::Comma, sc.next_token().tok);
-        assert_eq!(Token::Colon, sc.next_token().tok);
-        assert_eq!(Token::Semi, sc.next_token().tok);
-        assert_eq!(Token::Eof, sc.next_token().tok);
+        assert_eq!(Token::LParen, sc.next_token().unwrap().tok);
+        assert_eq!(Token::RParen, sc.next_token().unwrap().tok);
+        assert_eq!(Token::LBrace, sc.next_token().unwrap().tok);
+        assert_eq!(Token::RBrace, sc.next_token().unwrap().tok);
+        assert_eq!(Token::ExclamaEqual, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Exclama, sc.next_token().unwrap().tok);
+        assert_eq!(Token::EqualEqual, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Equal, sc.next_token().unwrap().tok);
+        assert_eq!(Token::GreaterEqual, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Greater, sc.next_token().unwrap().tok);
+        assert_eq!(Token::LesserEqual, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Lesser, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Star, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Slash, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Plus, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Minus, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Comma, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Colon, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Semi, sc.next_token().unwrap().tok);
+        assert_eq!(Token::Eof, sc.next_token().unwrap().tok);
     }
 
     #[test]
     fn scan_identifiers_test() {
         let (mut sc, sf) = create_scanner("a abc abc123 123abc _a_");
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Identifier, tok);
         assert_eq!("a", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Identifier, tok);
         assert_eq!("abc", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Identifier, tok);
         assert_eq!("abc123", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("123", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Identifier, tok);
         assert_eq!("abc", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Identifier, tok);
         assert_eq!("_a_", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, .. } = sc.next_token();
+        let TokenAndSpan { tok, .. } = sc.next_token().unwrap();
         assert_eq!(Token::Eof, tok);
     }
 
@@ -400,63 +402,63 @@ mod test {
              write writeln if else while whileif",
         );
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Program, tok);
         assert_eq!("program", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Let, tok);
         assert_eq!("let", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Int, tok);
         assert_eq!("int", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Bool, tok);
         assert_eq!("bool", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Float, tok);
         assert_eq!("float", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Str, tok);
         assert_eq!("str", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Read, tok);
         assert_eq!("read", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Readln, tok);
         assert_eq!("readln", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Write, tok);
         assert_eq!("write", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Writeln, tok);
         assert_eq!("writeln", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::If, tok);
         assert_eq!("if", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Else, tok);
         assert_eq!("else", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::While, tok);
         assert_eq!("while", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Identifier, tok);
         assert_eq!("whileif", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, .. } = sc.next_token();
+        let TokenAndSpan { tok, .. } = sc.next_token().unwrap();
         assert_eq!(Token::Eof, tok);
     }
 
@@ -464,15 +466,15 @@ mod test {
     fn scan_string_literals_test() {
         let (mut sc, sf) = create_scanner("\"\" \"foo bar 123 !!!\"");
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::StringLiteral, tok);
         assert_eq!("\"\"", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::StringLiteral, tok);
         assert_eq!("\"foo bar 123 !!!\"", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, .. } = sc.next_token();
+        let TokenAndSpan { tok, .. } = sc.next_token().unwrap();
         assert_eq!(Token::Eof, tok);
     }
 
@@ -480,10 +482,16 @@ mod test {
     fn nonterminating_string_literal_test() {
         let (mut sc, _) = create_scanner("\"abc");
 
-        let tok = sc.try_next_token();
-        assert!(tok.is_err());
+        let tok = sc.next_token();
+        assert_eq!(
+            ReportCode::MissingTerminatingStringMark {
+                str_start_pos: BytePos(0),
+                eol_pos: BytePos(4),
+            },
+            tok.unwrap_err()
+        );
 
-        let TokenAndSpan { tok, .. } = sc.next_token();
+        let TokenAndSpan { tok, .. } = sc.next_token().unwrap();
         assert_eq!(Token::Eof, tok);
     }
 
@@ -492,14 +500,14 @@ mod test {
         let (mut sc, _) = create_scanner("\"abc\n\"");
 
         // Scans the first string.
-        let tok = sc.try_next_token();
+        let tok = sc.next_token();
         assert!(tok.is_err());
 
         // Recognizes a second string.
-        let tok = sc.try_next_token();
+        let tok = sc.next_token();
         assert!(tok.is_err());
 
-        let TokenAndSpan { tok, .. } = sc.next_token();
+        let TokenAndSpan { tok, .. } = sc.next_token().unwrap();
         assert_eq!(Token::Eof, tok);
     }
 
@@ -508,47 +516,47 @@ mod test {
         let (mut sc, sf) =
             create_scanner("0 0123 3.14 3.14e42 0e0 0E0 0e+0 0e-0 0E+0 0E-0");
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0123", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("3.14", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("3.14e42", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0e0", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0E0", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0e+0", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0e-0", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0E+0", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, sp } = sc.next_token();
+        let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
         assert_eq!(Token::Number, tok);
         assert_eq!("0E-0", sf.span_to_snippet(sp));
 
-        let TokenAndSpan { tok, .. } = sc.next_token();
+        let TokenAndSpan { tok, .. } = sc.next_token().unwrap();
         assert_eq!(Token::Eof, tok);
     }
 
@@ -556,10 +564,15 @@ mod test {
     fn missing_exponent_digits_test() {
         let (mut sc, _) = create_scanner("0e");
 
-        let tok = sc.try_next_token();
-        assert!(tok.is_err());
+        let tok = sc.next_token();
+        assert_eq!(
+            ReportCode::MissingExponentDigits {
+                exp_pos: BytePos(1),
+            },
+            tok.unwrap_err()
+        );
 
-        let TokenAndSpan { tok, .. } = sc.next_token();
+        let TokenAndSpan { tok, .. } = sc.next_token().unwrap();
         assert_eq!(Token::Eof, tok);
     }
 }
