@@ -1,15 +1,22 @@
 use std::ops::{Add, Sub};
 use std::rc::Rc;
 
+/// A byte position or offset into a source file's text buffer. This is used to
+/// map ASTs to soure code by indicating the position from which an AST node
+/// was parsed.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct BytePos(pub usize);
 
+/// A range (span) into a source file's text buffer, indicating a region of
+/// text.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Span {
     pub start: BytePos,
     pub end: BytePos,
 }
 
+/// Conversion from offsets (e.g. `BytePos`) to arithmetic values and
+/// vice-versa.
 pub trait Pos {
     fn from_usize(value: usize) -> Self;
     fn to_usize(&self) -> usize;
@@ -47,13 +54,19 @@ impl Sub for BytePos {
     }
 }
 
+/// A source location containing line and column number. Useful for diagnostics.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Loc {
     pub line: usize,
     pub col: BytePos,
 }
 
-/// Maps the content of a file into line and column positions.
+/// This holds information of a given source file, such as the source name,
+/// text buffer, line positions etc.
+///
+/// A `SourceFile` assists in reporting errors and mapping ASTs to source code,
+/// providing an interface for text information lookup, such as: line and
+/// column number for a given position; text snippets from spans etc.
 pub struct SourceFile {
     /// File's content.
     pub src: Rc<String>,
@@ -64,6 +77,9 @@ pub struct SourceFile {
 }
 
 impl SourceFile {
+    /// Constructs a new `SourceFile` from a string (the text buffer).
+    ///
+    /// Line positions are precomputed by this function.
     pub fn new(name: String, src: String) -> SourceFile {
         let mut lines = vec![BytePos(0)];
 
@@ -82,10 +98,12 @@ impl SourceFile {
         }
     }
 
+    /// Returns a string slice represented by a `Span`.
     pub fn span_to_snippet(&self, s: Span) -> &str {
         &self.src[s.start.0..s.end.0]
     }
 
+    /// Returns the line number for a `BytePos` if such is valid.
     pub fn lookup_line_index(&self, pos: BytePos) -> Option<usize> {
         let pos_index = pos.to_usize();
         for (i, line_pos) in self.lines.iter().enumerate() {
@@ -98,6 +116,8 @@ impl SourceFile {
         None
     }
 
+    /// Returns the source information (line/column number etc) of a
+    /// `BytePos` if such is valid.
     pub fn lookup_source_location(&self, pos: BytePos) -> Option<Loc> {
         self.lookup_line_index(pos).map(|line_index| {
             let line = line_index + 1;
@@ -110,7 +130,7 @@ impl SourceFile {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{BytePos, Loc, SourceFile, Span};
 
     fn create_source_file() -> SourceFile {
         SourceFile::new(
@@ -193,9 +213,6 @@ mod tests {
             source_file.lookup_source_location(BytePos(15))
         );
 
-        assert_eq!(
-            None,
-            source_file.lookup_source_location(BytePos(37))
-        );
+        assert_eq!(None, source_file.lookup_source_location(BytePos(37)));
     }
 }

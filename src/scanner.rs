@@ -1,10 +1,10 @@
-use srcmap::{BytePos, Pos, SourceFile, Span, DUMMY_SPAN};
 use diagnostics::ReportCode;
+use srcmap::{BytePos, Pos, SourceFile, Span, DUMMY_SPAN};
 use std::rc::Rc;
 
 /// The syntactic category of a token.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Token {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Token {
     LParen,
     RParen,
     LBrace,
@@ -43,13 +43,21 @@ enum Token {
     Eof,
 }
 
+/// A token and its lexeme information given by a span.
 #[derive(Debug)]
-struct TokenAndSpan {
+pub struct TokenAndSpan {
+    /// The scanned token.
     tok: Token,
+    /// The lexeme information of this token.
     sp: Span,
 }
 
-struct Scanner {
+/// The scanner.
+///
+/// This struct provides an interface to perform concurrent lexical analysis
+/// over a source file. In other words, it transforms a source file (i.e. text
+/// buffer) into a stream of tokens.
+pub struct Scanner {
     source_file: Rc<SourceFile>,
     src: Rc<String>,
     ch: Option<char>,
@@ -60,7 +68,8 @@ struct Scanner {
 }
 
 impl Scanner {
-    fn new(source_file: Rc<SourceFile>) -> Scanner {
+    /// Creates a scanner for a source file.
+    pub fn new(source_file: Rc<SourceFile>) -> Scanner {
         let src = source_file.src.clone();
         let mut sc = Scanner {
             source_file,
@@ -101,7 +110,47 @@ impl Scanner {
         }
     }
 
-    fn next_token(&mut self) -> Result<TokenAndSpan, ReportCode> {
+    /// Parses a token from the source file, and advances the text buffer
+    /// cursor.
+    ///
+    /// Usage comes down to calling `next_token` in order to parse one token
+    /// from the source file at a time. This function returns either a
+    /// successfully scanned token, or a parsing error, which can be
+    /// reported by a diagnostic handler.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use scanner::{Scanner, TokenAndSpan};
+    /// use srcmap::{ByteCode, SourceMap, Span, DUMMY_SPAN};
+    ///
+    /// let source_file =
+    ///     Rc::new(SourceFile::new("test".into(), "abc 123\n".into()));
+    /// let mut scanner = Scanner::new(source_file);
+    /// let tok1 = TokenAndSpan {
+    ///     tok: Token::Identifier,
+    ///     sp: Span {
+    ///         start: BytePos(0),
+    ///         end: BytePos(3),
+    ///     },
+    /// };
+    /// let tok2 = TokenAndSpan {
+    ///     tok: Token::Number,
+    ///     sp: Span {
+    ///         start: BytePos(3),
+    ///         end: BytePos(6),
+    ///     },
+    /// };
+    /// let tok3 = TokenAndSpan {
+    ///     tok: Token::Eof,
+    ///     sp: DUMMY_SPAN,
+    /// };
+    ///
+    /// assert_eq!(Ok(tok1), scanner.next_token());
+    /// assert_eq!(Ok(tok2), scanner.next_token());
+    /// assert_eq!(Ok(tok3), scanner.next_token());
+    /// ```
+    pub fn next_token(&mut self) -> Result<TokenAndSpan, ReportCode> {
         while is_whitespace(self.ch) {
             self.bump();
         }
@@ -398,8 +447,8 @@ mod test {
     #[test]
     fn scan_keywords_test() {
         let (mut sc, sf) = create_scanner(
-            "program let int bool float str read readln \
-             write writeln if else while whileif",
+            "program let int bool float str read readln write writeln if else \
+             while whileif",
         );
 
         let TokenAndSpan { tok, sp } = sc.next_token().unwrap();
