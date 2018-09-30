@@ -1,5 +1,7 @@
 # Blaise
 
+[![Build Status](https://travis-ci.com/feroldi/blaise.svg?token=FjPQjKrsmeJzM46SGssn&branch=master)](https://travis-ci.com/feroldi/blaise)
+
 Blaise é o nome do projeto da disciplina de compiladores.
 
 ## Gramática
