@@ -1,4 +1,3 @@
-use scanner::{Scanner, Token};
 
 #[derive(Debug)]
 enum Ty {
@@ -9,7 +8,7 @@ enum Ty {
 }
 
 #[derive(Debug)]
-enum CalTy {
+enum CallTy {
     Read,
     ReadLn,
     Write,
@@ -81,28 +80,3 @@ struct Program {
     stmts: Vec<Box<Stmt>>,
 }
 
-struct Parser {
-    scanner: Scanner,
-    peek_tok: Option<Token>,
-}
-
-impl Parser {
-    fn new(scanner: Scanner) -> Parser {
-        Parser {
-            scanner,
-        }
-    }
-
-    fn peek_is(&mut self, tok: Token) -> bool {
-        match self.peek_tok {
-            Some(peek_tok) => peek_tok == tok,
-            None => {
-                let next_tok = self.scanner.next_token();
-            }
-        }
-    }
-
-    fn consume(&self) -> Token {
-
-    }
-}

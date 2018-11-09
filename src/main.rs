@@ -1,9 +1,8 @@
 #![feature(universal_impl_trait)]
 #![feature(dotdoteq_in_patterns)]
+#![feature(use_nested_groups)]
 
-pub mod srcmap;
-pub mod diagnostics;
-pub mod scanner;
+pub mod syntax;
 
 fn main() {
     println!("Hello, World!");
