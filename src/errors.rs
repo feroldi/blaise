@@ -25,7 +25,14 @@ pub enum Diag {
         pos: BytePos,
     },
     UnexpectedEndOfFile,
-    ExpectedWord { expected: Category, got: Word },
+    ExpectedWord {
+        expected: Category,
+        got: Word,
+    },
+    ExpectedOneOf {
+        expected: Vec<Category>,
+        got: Word,
+    },
 }
 
 pub struct Handler {
@@ -66,11 +73,21 @@ impl fmt::Display for Diag {
                 "missing terminating quotation mark for string literal"
             ),
             Diag::UnknownCharacter { .. } => write!(f, "unknown character"),
-            Diag::UnexpectedEndOfFile => {
-                write!(f, "unexpected end of file")
-            }
+            Diag::UnexpectedEndOfFile => write!(f, "unexpected end of file"),
             Diag::ExpectedWord { expected, got } => {
-                write!(f, "expected '{}', got '{}'", expected, got.category)
+                write!(f, "expected {}, but got {}", expected, got.category)
+            }
+            Diag::ExpectedOneOf { ref expected, got } => {
+                let one_of = expected
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "expected one of {}, but got {}",
+                    one_of, got.category
+                )
             }
         }
     }

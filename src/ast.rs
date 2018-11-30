@@ -6,14 +6,6 @@ pub enum Ty {
     StrTy,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum CallKind {
-    Read,
-    ReadLn,
-    Write,
-    WriteLn,
-}
-
 /// A Name references an identifier in the identifier table.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Name(pub u64);
@@ -61,27 +53,28 @@ pub enum Expr {
 
 #[derive(Debug, PartialEq)]
 pub struct Block {
-    stmts: Vec<Box<Stmt>>,
+    pub stmts: Vec<Stmt>,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
-    While(Box<Expr>, Box<Block>),
-    If(Box<Expr>, Box<Block>, Option<Box<Block>>),
-    Block(Box<Block>),
-    Assign(Ident, Box<Expr>),
-    Call(CallKind, Vec<Ident>),
+    While(Expr, Box<Block>),
+    If(Expr, Box<Block>, Option<Box<Block>>),
+    Assign(Ident, Expr),
+    BlockStmt(Box<Block>),
+    Call(Ident, Vec<Expr>),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Decl {
-    id: Ident,
-    ty: Ty,
+    pub ident: Ident,
+    pub ty: Ty,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Program {
-    decls: Vec<Box<Decl>>,
-    stmts: Vec<Box<Stmt>>,
+    pub name: Ident,
+    pub decls: Vec<Decl>,
+    pub stmts: Vec<Stmt>,
 }
 

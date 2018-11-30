@@ -25,6 +25,144 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn is_start_of_statement(&self) -> bool {
+        match self.peek_word.category {
+            Category::Ident
+            | Category::If
+            | Category::While
+            | Category::OpenCurly => true,
+            _ => false,
+        }
+    }
+
+    fn parse_block_stmt(&mut self) -> Result<ast::Stmt> {
+        assert_eq!(Category::OpenCurly, self.peek_word.category);
+        let block = self.parse_block()?;
+        Ok(ast::Stmt::BlockStmt(Box::new(block)))
+    }
+
+    fn parse_command(&mut self) -> Result<ast::Stmt> {
+        let stmt = match self.peek_word.category {
+            Category::Ident => self.parse_assignment()?,
+            Category::If => self.parse_selection()?,
+            Category::While => self.parse_repetition()?,
+            Category::OpenCurly => self.parse_block_stmt()?,
+            _ => panic!("has to be the start of an statement!"),
+        };
+        Ok(stmt)
+    }
+
+    fn parse_program(&mut self) -> Result<ast::Program> {
+        self.expect_and_consume(Category::Program)?;
+        let prog_name = self.parse_ident()?;
+        self.expect_and_consume(Category::Semi);
+
+        let mut decls = vec![];
+        let mut stmts = vec![];
+
+        while self.peek_word.category == Category::Let {
+            decls.push(self.parse_decl()?);
+        }
+
+        while self.is_start_of_statement() {
+            stmts.push(self.parse_command()?);
+            self.expect_and_consume(Category::Semi)?;
+        }
+
+        Ok(ast::Program {
+            name: prog_name,
+            decls,
+            stmts,
+        })
+    }
+
+    fn parse_decl(&mut self) -> Result<ast::Decl> {
+        assert_eq!(Category::Let, self.peek_word.category);
+        self.expect_and_consume(Category::Let)?;
+        let ident = self.parse_ident()?;
+        self.expect_and_consume(Category::Colon)?;
+        let ty = self.parse_ty()?;
+        self.expect_and_consume(Category::Semi)?;
+        Ok(ast::Decl { ident, ty })
+    }
+
+    fn parse_ty(&mut self) -> Result<ast::Ty> {
+        let ty_word = self.expect_one_of_and_consume(&[
+            Category::Bool,
+            Category::Int,
+            Category::Float,
+            Category::Str,
+        ])?;
+
+        let ty = match ty_word.category {
+            Category::Bool => ast::Ty::BoolTy,
+            Category::Int => ast::Ty::IntTy,
+            Category::Float => ast::Ty::FloatTy,
+            Category::Str => ast::Ty::StrTy,
+            _ => panic!("has to be a type!"),
+        };
+
+        Ok(ty)
+    }
+
+    fn parse_block(&mut self) -> Result<ast::Block> {
+        self.expect_and_consume(Category::OpenCurly)?;
+        let mut commands = vec![self.parse_command()?];
+        self.expect_and_consume(Category::Semi)?;
+        while self.is_start_of_statement() {
+            commands.push(self.parse_command()?);
+            self.expect_and_consume(Category::Semi)?;
+        }
+        self.expect_and_consume(Category::CloseCurly)?;
+        Ok(ast::Block { stmts: commands })
+    }
+
+    fn parse_call(&mut self) -> Result<ast::Stmt> {
+        let func_id = self.parse_ident()?;
+        self.expect_and_consume(Category::OpenParen)?;
+        let mut args = vec![];
+        while self.peek_word.category != Category::CloseParen {
+            args.push(self.parse_expr()?);
+            if self.peek_word.category == Category::CloseParen {
+                break;
+            }
+            self.expect_and_consume(Category::Comma)?;
+        }
+        Ok(ast::Stmt::Call(func_id, args))
+    }
+
+    fn parse_assignment(&mut self) -> Result<ast::Stmt> {
+        assert_eq!(Category::Ident, self.peek_word.category);
+        let ident = self.parse_ident()?;
+        self.expect_and_consume(Category::Eq)?;
+        let expr = self.parse_expr()?;
+        Ok(ast::Stmt::Assign(ident, expr))
+    }
+
+    fn parse_selection(&mut self) -> Result<ast::Stmt> {
+        assert_eq!(Category::If, self.peek_word.category);
+        self.consume();
+        let cond_expr = self.parse_expr()?;
+        let then_block = self.parse_block()?;
+        let else_block = if self.peek_word.category == Category::Else {
+            self.consume();
+            let else_block = self.parse_block()?;
+            Some(Box::new(else_block))
+        } else {
+            None
+        };
+
+        Ok(ast::Stmt::If(cond_expr, Box::new(then_block), else_block))
+    }
+
+    fn parse_repetition(&mut self) -> Result<ast::Stmt> {
+        assert_eq!(Category::While, self.peek_word.category);
+        self.consume();
+        let cond_expr = self.parse_expr()?;
+        let block = self.parse_block()?;
+        Ok(ast::Stmt::While(cond_expr, Box::new(block)))
+    }
+
     fn parse_expr(&mut self) -> Result<ast::Expr> {
         use ast::Expr;
         let lhs_expr = self.parse_term()?;
@@ -120,7 +258,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_factor(&mut self) -> Result<ast::Expr> {
-        use ast::{Expr, Ident, Lit};
+        use ast::{Expr, Lit};
         match self.peek_word.category {
             Category::OpenParen => {
                 self.consume();
@@ -147,21 +285,27 @@ impl<'a> Parser<'a> {
                 self.consume();
                 Ok(Expr::Lit(Lit::FloatLit(value)))
             }
-            Category::Ident => {
-                let mut last_name_id = self.last_name_id;
-                let ident = self.get_peek_lexeme().to_owned();
-                let name =
-                    *self.ident_table.entry(ident).or_insert_with(|| {
-                        let name = ast::Name(last_name_id);
-                        last_name_id += 1;
-                        name
-                    });
-                self.last_name_id = last_name_id;
-                self.consume();
-                Ok(Expr::Ident(Ident { name }))
-            }
+            Category::Ident => Ok(Expr::Ident(self.parse_ident()?)),
             _ => unimplemented!(),
         }
+    }
+
+    fn register_name(&mut self, ident: String) -> ast::Name {
+        let mut last_name_id = self.last_name_id;
+        let name = *self.ident_table.entry(ident).or_insert_with(|| {
+            let name = ast::Name(last_name_id);
+            last_name_id += 1;
+            name
+        });
+        self.last_name_id = last_name_id;
+        name
+    }
+
+    fn parse_ident(&mut self) -> Result<ast::Ident> {
+        let ident = self.expect_and_consume(Category::Ident)?;
+        let id_lexeme = self.get_lexeme(ident.lexeme).to_owned();
+        let name = self.register_name(id_lexeme);
+        Ok(ast::Ident { name })
     }
 
     fn consume(&mut self) -> Word {
@@ -176,6 +320,20 @@ impl<'a> Parser<'a> {
         } else {
             Err(Diag::ExpectedWord {
                 expected: category,
+                got: self.peek_word,
+            })
+        }
+    }
+
+    fn expect_one_of_and_consume(
+        &mut self,
+        categories: &[Category],
+    ) -> Result<Word> {
+        if categories.contains(&self.peek_word.category) {
+            Ok(self.consume())
+        } else {
+            Err(Diag::ExpectedOneOf {
+                expected: categories.to_owned(),
                 got: self.peek_word,
             })
         }
@@ -344,5 +502,129 @@ mod test {
             Box::new(mk_int(0)),
         );
         assert_eq!(Ok(expr), parser.parse_expr());
+    }
+
+    #[test]
+    fn test_parse_selection() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser =
+            create_parser("if 1 { x = 0; } else { x = 1; }", &handler);
+
+        let stmt = ast::Stmt::If(
+            mk_int(1),
+            Box::new(ast::Block {
+                stmts: vec![
+                    ast::Stmt::Assign(
+                        ast::Ident { name: ast::Name(0) },
+                        mk_int(0),
+                    ),
+                ],
+            }),
+            Some(Box::new(ast::Block {
+                stmts: vec![
+                    ast::Stmt::Assign(
+                        ast::Ident { name: ast::Name(0) },
+                        mk_int(1),
+                    ),
+                ],
+            })),
+        );
+
+        assert_eq!(Ok(stmt), parser.parse_selection());
+    }
+
+    #[test]
+    fn test_parse_selection_without_else() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("if 1 { x = 0; }", &handler);
+
+        let stmt = ast::Stmt::If(
+            mk_int(1),
+            Box::new(ast::Block {
+                stmts: vec![
+                    ast::Stmt::Assign(
+                        ast::Ident { name: ast::Name(0) },
+                        mk_int(0),
+                    ),
+                ],
+            }),
+            None,
+        );
+
+        assert_eq!(Ok(stmt), parser.parse_selection());
+    }
+
+    #[test]
+    fn test_parse_repetition() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("while 1 { x = 0; }", &handler);
+
+        let stmt = ast::Stmt::While(
+            mk_int(1),
+            Box::new(ast::Block {
+                stmts: vec![
+                    ast::Stmt::Assign(
+                        ast::Ident { name: ast::Name(0) },
+                        mk_int(0),
+                    ),
+                ],
+            }),
+        );
+
+        assert_eq!(Ok(stmt), parser.parse_repetition());
+    }
+
+    #[test]
+    fn test_parse_block() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("{ x = 0; y = 1; x = 2; }", &handler);
+
+        let stmt = ast::Stmt::BlockStmt(Box::new(ast::Block {
+            stmts: vec![
+                ast::Stmt::Assign(ast::Ident { name: ast::Name(0) }, mk_int(0)),
+                ast::Stmt::Assign(ast::Ident { name: ast::Name(1) }, mk_int(1)),
+                ast::Stmt::Assign(ast::Ident { name: ast::Name(0) }, mk_int(2)),
+            ],
+        }));
+
+        assert_eq!(Ok(stmt), parser.parse_block_stmt());
+    }
+
+    #[test]
+    fn test_parse_decl() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("let i: int;", &handler);
+
+        let decl = ast::Decl {
+            ident: ast::Ident { name: ast::Name(0) },
+            ty: ast::Ty::IntTy,
+        };
+
+        assert_eq!(Ok(decl), parser.parse_decl());
+    }
+
+    #[test]
+    fn test_parse_program() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser =
+            create_parser("program a; let i: int; i = 42;", &handler);
+
+        let prog = ast::Program {
+            name: ast::Ident { name: ast::Name(0) },
+            decls: vec![
+                ast::Decl {
+                    ident: ast::Ident { name: ast::Name(1) },
+                    ty: ast::Ty::IntTy,
+                },
+            ],
+            stmts: vec![
+                ast::Stmt::Assign(
+                    ast::Ident { name: ast::Name(1) },
+                    mk_int(42),
+                ),
+            ],
+        };
+
+        assert_eq!(Ok(prog), parser.parse_program());
     }
 }

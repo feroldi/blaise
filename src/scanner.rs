@@ -31,10 +31,6 @@ pub enum Category {
     Bool,
     Float,
     Str,
-    Read,
-    Readln,
-    Write,
-    Writeln,
     If,
     Else,
     While,
@@ -75,10 +71,6 @@ impl fmt::Display for Category {
                 Category::Bool => "`bool`",
                 Category::Float => "`float`",
                 Category::Str => "`str`",
-                Category::Read => "`read`",
-                Category::Readln => "`readln`",
-                Category::Write => "`write`",
-                Category::Writeln => "`writeln`",
                 Category::If => "`if`",
                 Category::Else => "`else`",
                 Category::While => "`while`",
@@ -207,10 +199,6 @@ impl Scanner {
             "bool" => Category::Bool,
             "float" => Category::Float,
             "str" => Category::Str,
-            "read" => Category::Read,
-            "readln" => Category::Readln,
-            "write" => Category::Write,
-            "writeln" => Category::Writeln,
             "if" => Category::If,
             "else" => Category::Else,
             "while" => Category::While,
@@ -532,8 +520,7 @@ mod test {
     #[test]
     fn test_scan_keywords() {
         let (mut sc, sf) = create_scanner(
-            "program let int bool float str read readln write writeln if else \
-             while whileif",
+            "program let int bool float str if else while whileif",
         );
 
         let Word { category, lexeme } = sc.next_word().unwrap();
@@ -559,22 +546,6 @@ mod test {
         let Word { category, lexeme } = sc.next_word().unwrap();
         assert_eq!(Category::Str, category);
         assert_eq!("str", sf.span_to_snippet(lexeme));
-
-        let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Read, category);
-        assert_eq!("read", sf.span_to_snippet(lexeme));
-
-        let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Readln, category);
-        assert_eq!("readln", sf.span_to_snippet(lexeme));
-
-        let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Write, category);
-        assert_eq!("write", sf.span_to_snippet(lexeme));
-
-        let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Writeln, category);
-        assert_eq!("writeln", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
         assert_eq!(Category::If, category);
