@@ -1,5 +1,5 @@
 use scanner::{Category, Word};
-use source_map::{BytePos, Span};
+use source_map::{BytePos, Span, DUMMY_BPOS};
 use std::fmt;
 
 /// A `Diag` value gathers enough information about some error in the
@@ -35,12 +35,26 @@ pub enum Diag {
     },
 }
 
+impl Diag {
+    pub fn location(&self) -> BytePos {
+        match *self {
+            Diag::InvalidDigit { invalid_span } => invalid_span.start,
+            Diag::MissingExponentDigits { exp_pos } => exp_pos,
+            Diag::MissingTerminatingStringMark { str_start_pos, .. } => str_start_pos,
+            Diag::UnknownCharacter { pos } => pos,
+            Diag::ExpectedWord { got: Word { lexeme, .. }, .. } => lexeme.start,
+            Diag::ExpectedOneOf { got: Word { lexeme, .. }, .. } => lexeme.start,
+            _ => DUMMY_BPOS,
+        }
+    }
+}
+
 pub struct Handler {
     emitter: Box<Fn(Diag) -> bool>,
 }
 
 impl Handler {
-    fn with_emitter<E>(emitter: E) -> Handler
+    pub fn with_emitter<E>(emitter: E) -> Handler
     where
         E: Fn(Diag) -> bool + 'static,
     {

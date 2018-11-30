@@ -7,7 +7,7 @@ use std::result;
 
 type Result<T> = result::Result<T, Diag>;
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     word_stream: WordStream<'a>,
     peek_word: Word,
     ident_table: HashMap<String, ast::Name>,
@@ -15,7 +15,7 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn new(mut word_stream: WordStream<'a>) -> Parser {
+    pub fn new(mut word_stream: WordStream<'a>) -> Parser {
         let peek_word = word_stream.next();
         Parser {
             word_stream,
@@ -52,7 +52,7 @@ impl<'a> Parser<'a> {
         Ok(stmt)
     }
 
-    fn parse_program(&mut self) -> Result<ast::Program> {
+    pub fn parse_program(&mut self) -> Result<ast::Program> {
         self.expect_and_consume(Category::Program)?;
         let prog_name = self.parse_ident()?;
         self.expect_and_consume(Category::Semi);
@@ -117,8 +117,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Block { stmts: commands })
     }
 
-    fn parse_call(&mut self) -> Result<ast::Stmt> {
-        let func_id = self.parse_ident()?;
+    fn parse_call(&mut self, func_id: ast::Ident) -> Result<ast::Stmt> {
         self.expect_and_consume(Category::OpenParen)?;
         let mut args = vec![];
         while self.peek_word.category != Category::CloseParen {
@@ -128,12 +127,16 @@ impl<'a> Parser<'a> {
             }
             self.expect_and_consume(Category::Comma)?;
         }
+        self.expect_and_consume(Category::CloseParen)?;
         Ok(ast::Stmt::Call(func_id, args))
     }
 
     fn parse_assignment(&mut self) -> Result<ast::Stmt> {
         assert_eq!(Category::Ident, self.peek_word.category);
         let ident = self.parse_ident()?;
+        if self.peek_word.category == Category::OpenParen {
+            return self.parse_call(ident);
+        }
         self.expect_and_consume(Category::Eq)?;
         let expr = self.parse_expr()?;
         Ok(ast::Stmt::Assign(ident, expr))
@@ -172,8 +175,8 @@ impl<'a> Parser<'a> {
                 self.consume();
                 let rhs_expr = self.parse_expr()?;
                 let expr_op = match expr_cat {
-                    Category::Star => ast::BinOp::Add,
-                    Category::Slash => ast::BinOp::Sub,
+                    Category::Plus => ast::BinOp::Add,
+                    Category::Minus => ast::BinOp::Sub,
                     _ => panic!("has to be an additive operator!"),
                 };
                 Ok(Expr::BinaryOp(
@@ -498,6 +501,18 @@ mod test {
         let mut parser = create_parser("0 * 0", &handler);
         let expr = ast::Expr::BinaryOp(
             ast::BinOp::Mult,
+            Box::new(mk_int(0)),
+            Box::new(mk_int(0)),
+        );
+        assert_eq!(Ok(expr), parser.parse_expr());
+    }
+
+    #[test]
+    fn test_parse_additive() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("0 + 0", &handler);
+        let expr = ast::Expr::BinaryOp(
+            ast::BinOp::Add,
             Box::new(mk_int(0)),
             Box::new(mk_int(0)),
         );
