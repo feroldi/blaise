@@ -25,9 +25,73 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // TODO
     fn parse_expr(&mut self) -> Result<ast::Expr> {
-        self.parse_factor()
+        use ast::Expr;
+        let lhs_expr = self.parse_term()?;
+        match self.peek_word.category {
+            Category::Plus | Category::Minus => {
+                let expr_cat = self.peek_word.category;
+                self.consume();
+                let rhs_expr = self.parse_expr()?;
+                let expr_op = match expr_cat {
+                    Category::Star => ast::BinOp::Add,
+                    Category::Slash => ast::BinOp::Sub,
+                    _ => panic!("has to be an additive operator!"),
+                };
+                Ok(Expr::BinaryOp(
+                    expr_op,
+                    Box::new(lhs_expr),
+                    Box::new(rhs_expr),
+                ))
+            }
+            _ => Ok(lhs_expr),
+        }
+    }
+
+    fn parse_term(&mut self) -> Result<ast::Expr> {
+        use ast::Expr;
+        let lhs_expr = self.parse_equality_expr()?;
+        match self.peek_word.category {
+            Category::Star | Category::Slash => {
+                let term_cat = self.peek_word.category;
+                self.consume();
+                let rhs_expr = self.parse_term()?;
+                let term_op = match term_cat {
+                    Category::Star => ast::BinOp::Mult,
+                    Category::Slash => ast::BinOp::Div,
+                    _ => panic!("has to be a multiplicative operator!"),
+                };
+                Ok(Expr::BinaryOp(
+                    term_op,
+                    Box::new(lhs_expr),
+                    Box::new(rhs_expr),
+                ))
+            }
+            _ => Ok(lhs_expr),
+        }
+    }
+
+    fn parse_equality_expr(&mut self) -> Result<ast::Expr> {
+        use ast::Expr;
+        let lhs_expr = self.parse_relational_expr()?;
+        match self.peek_word.category {
+            Category::EqEq | Category::Ne => {
+                let eq_cat = self.peek_word.category;
+                self.consume();
+                let rhs_expr = self.parse_equality_expr()?;
+                let eq_op = match eq_cat {
+                    Category::EqEq => ast::BinOp::Eq,
+                    Category::Ne => ast::BinOp::Ne,
+                    _ => panic!("has to be an equality operator!"),
+                };
+                Ok(Expr::BinaryOp(
+                    eq_op,
+                    Box::new(lhs_expr),
+                    Box::new(rhs_expr),
+                ))
+            }
+            _ => Ok(lhs_expr),
+        }
     }
 
     fn parse_relational_expr(&mut self) -> Result<ast::Expr> {
@@ -250,11 +314,35 @@ mod test {
     fn test_parse_relational_expr() {
         let handler = errors::Handler::with_ignoring_emitter();
         let mut parser = create_parser("0 < 0", &handler);
-        let rel_expr = ast::Expr::BinaryOp(
+        let expr = ast::Expr::BinaryOp(
             ast::BinOp::Lt,
             Box::new(mk_int(0)),
             Box::new(mk_int(0)),
         );
-        assert_eq!(Ok(rel_expr), parser.parse_relational_expr());
+        assert_eq!(Ok(expr), parser.parse_expr());
+    }
+
+    #[test]
+    fn test_parse_equality_expr() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("0 == 0", &handler);
+        let expr = ast::Expr::BinaryOp(
+            ast::BinOp::Eq,
+            Box::new(mk_int(0)),
+            Box::new(mk_int(0)),
+        );
+        assert_eq!(Ok(expr), parser.parse_expr());
+    }
+
+    #[test]
+    fn test_parse_term() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("0 * 0", &handler);
+        let expr = ast::Expr::BinaryOp(
+            ast::BinOp::Mult,
+            Box::new(mk_int(0)),
+            Box::new(mk_int(0)),
+        );
+        assert_eq!(Ok(expr), parser.parse_expr());
     }
 }
