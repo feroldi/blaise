@@ -1,8 +1,10 @@
-#![feature(universal_impl_trait)]
-#![feature(dotdoteq_in_patterns)]
-#![feature(use_nested_groups)]
+#![feature(universal_impl_trait, dotdoteq_in_patterns, use_nested_groups)]
 
-pub mod syntax;
+pub mod ast;
+pub mod errors;
+pub mod scanner;
+pub mod parser;
+pub mod source_map;
 
 fn main() {
     println!("Hello, World!");

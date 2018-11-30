@@ -1,55 +1,15 @@
+use errors::{self, Diag};
+use source_map::{BytePos, Pos, SourceFile, Span, DUMMY_SPAN};
 use std::fmt;
 use std::rc::Rc;
-use syntax;
-use syntax::source_map::{BytePos, Pos, SourceFile, Span, DUMMY_SPAN};
-
-#[derive(Debug)]
-pub enum ScanError {
-    /// Numeric literals with no digits after an exponent.
-    MissingExponentDigits { exp_pos: BytePos },
-    /// String literals missing a terminating quotation mark.
-    MissingTerminatingStringMark {
-        str_start_pos: BytePos,
-        eol_pos: BytePos,
-    },
-    /// Unknown character in the source code.
-    UnknownCharacter { pos: BytePos },
-}
-
-impl From<ScanError> for syntax::Error {
-    fn from(err: ScanError) -> syntax::Error {
-        syntax::Error::Scan(err)
-    }
-}
-
-impl fmt::Display for ScanError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ScanError::MissingExponentDigits { .. } => {
-                write!(f, "missing exponent digits for decimal literal")
-            }
-            ScanError::MissingTerminatingStringMark { .. } => write!(
-                f,
-                "missing terminating quotation mark for string literal"
-            ),
-            ScanError::UnknownCharacter { .. } => {
-                write!(f, "unknown character")
-            }
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Delim {
-    Paren,
-    Curly,
-}
 
 /// The syntactic category of a word.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Category {
-    OpenDelim(Delim),
-    CloseDelim(Delim),
+    OpenParen,
+    CloseParen,
+    OpenCurly,
+    CloseCurly,
     Ne,
     Eq,
     EqEq,
@@ -79,13 +39,65 @@ pub enum Category {
     Else,
     While,
     Ident,
-    Num,
+    NumConst { is_float: bool },
     StrLit,
     Eof,
 }
 
+impl fmt::Display for Category {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                Category::OpenParen => "`(`",
+                Category::CloseParen => "`)`",
+                Category::OpenCurly => "`{`",
+                Category::CloseCurly => "`}`",
+                Category::Ne => "`!=`",
+                Category::Eq => "`=`",
+                Category::EqEq => "`==`",
+                Category::Ge => "`>=`",
+                Category::Gt => "`>`",
+                Category::Le => "`<=`",
+                Category::Lt => "`<`",
+                Category::Star => "`*`",
+                Category::Slash => "`/`",
+                Category::Plus => "`+`",
+                Category::Minus => "`-`",
+                Category::Not => "`!`",
+                Category::Comma => "`,`",
+                Category::Colon => "`:`",
+                Category::Semi => "`;`",
+                Category::Program => "`program`",
+                Category::Let => "`let`",
+                Category::Int => "`int`",
+                Category::Bool => "`bool`",
+                Category::Float => "`float`",
+                Category::Str => "`str`",
+                Category::Read => "`read`",
+                Category::Readln => "`readln`",
+                Category::Write => "`write`",
+                Category::Writeln => "`writeln`",
+                Category::If => "`if`",
+                Category::Else => "`else`",
+                Category::While => "`while`",
+                Category::Ident => "identifier",
+                Category::NumConst { is_float: false } => {
+                    "numeric integer constant"
+                }
+                Category::NumConst { is_float: true } => {
+                    "numeric floating point constant"
+                }
+                Category::StrLit => "string literal",
+                Category::Eof => "`<end of file>`",
+            }
+        )
+    }
+}
+
 /// A word and its lexeme information given by a span.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Word {
     /// The word's category.
     pub category: Category,
@@ -108,7 +120,7 @@ impl Word {
 /// over a source file. In other words, it transforms a source file (i.e. text
 /// buffer) into a stream of words.
 pub struct Scanner {
-    source_file: Rc<SourceFile>,
+    pub source_file: Rc<SourceFile>,
     src: Rc<String>,
     peek_ch: Option<char>,
     pos: BytePos,
@@ -163,7 +175,7 @@ impl Scanner {
     /// from the source file at a time. This function returns either a
     /// successfully scanned word, or a parsing error, which can be
     /// reported by a diagnostic handler.
-    pub fn next_word(&mut self) -> Result<Word, ScanError> {
+    pub fn next_word(&mut self) -> Result<Word, Diag> {
         while is_whitespace(self.peek_ch) {
             self.bump();
         }
@@ -175,20 +187,9 @@ impl Scanner {
         }
     }
 
-    fn scan_ident(&mut self) -> Result<Word, ScanError> {
+    fn scan_ident(&mut self) -> Result<Word, Diag> {
         let id_start_pos = self.pos;
         self.bump();
-
-        fn is_ident_body(c: Option<char>) -> bool {
-            let c = match c {
-                Some(c) => c,
-                _ => return false,
-            };
-            match c {
-                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => true,
-                _ => false,
-            }
-        }
 
         while is_ident_body(self.peek_ch) {
             self.bump();
@@ -219,7 +220,7 @@ impl Scanner {
         Ok(Word { category, lexeme })
     }
 
-    fn scan_number(&mut self) -> Result<Word, ScanError> {
+    fn scan_number(&mut self) -> Result<Word, Diag> {
         let num_start_pos = self.pos;
         self.bump();
 
@@ -234,7 +235,10 @@ impl Scanner {
             self.bump();
         }
 
+        let mut is_float = false;
+
         if self.ch_is('.') {
+            is_float = true;
             self.bump();
         }
 
@@ -244,6 +248,7 @@ impl Scanner {
 
         if self.ch_is('e') || self.ch_is('E') {
             let exponent_pos = self.pos;
+            is_float = true;
             self.bump();
 
             if self.ch_is('-') || self.ch_is('+') {
@@ -251,7 +256,7 @@ impl Scanner {
             }
 
             if !is_dec_digit(self.peek_ch) {
-                return Err(ScanError::MissingExponentDigits {
+                return Err(Diag::MissingExponentDigits {
                     exp_pos: exponent_pos,
                 });
             }
@@ -261,16 +266,34 @@ impl Scanner {
             self.bump();
         }
 
-        Ok(Word {
-            category: Category::Num,
-            lexeme: Span {
-                start: num_start_pos,
-                end: self.pos,
-            },
-        })
+        fn is_ident(c: Option<char>) -> bool {
+            c.map_or(false, |c| match c {
+                'a'..='z' | 'A'..='Z' | '_' => true,
+                _ => false,
+            })
+        }
+
+        if is_ident(self.peek_ch) {
+            let start = self.pos;
+            while is_ident_body(self.peek_ch) {
+                self.bump();
+            }
+            let end = self.pos;
+            Err(Diag::InvalidDigit {
+                invalid_span: Span { start, end },
+            })
+        } else {
+            Ok(Word {
+                category: Category::NumConst { is_float },
+                lexeme: Span {
+                    start: num_start_pos,
+                    end: self.pos,
+                },
+            })
+        }
     }
 
-    fn scan_string_literal(&mut self) -> Result<Word, ScanError> {
+    fn scan_string_literal(&mut self) -> Result<Word, Diag> {
         assert_eq!(Some('"'), self.peek_ch);
         let str_start_pos = self.pos;
         self.bump();
@@ -280,7 +303,7 @@ impl Scanner {
         }
 
         if self.ch_is('\n') || self.is_eof() {
-            return Err(ScanError::MissingTerminatingStringMark {
+            return Err(Diag::MissingTerminatingStringMark {
                 str_start_pos,
                 eol_pos: self.pos,
             });
@@ -298,26 +321,26 @@ impl Scanner {
         })
     }
 
-    fn scan_word(&mut self) -> Result<Word, ScanError> {
+    fn scan_word(&mut self) -> Result<Word, Diag> {
         assert!(self.peek_ch.is_some());
         let start_pos = self.pos;
 
         let category = match self.peek_ch.unwrap() {
             '(' => {
                 self.bump();
-                Category::OpenDelim(Delim::Paren)
+                Category::OpenParen
             }
             ')' => {
                 self.bump();
-                Category::CloseDelim(Delim::Paren)
+                Category::CloseParen
             }
             '{' => {
                 self.bump();
-                Category::OpenDelim(Delim::Curly)
+                Category::OpenCurly
             }
             '}' => {
                 self.bump();
-                Category::CloseDelim(Delim::Curly)
+                Category::CloseCurly
             }
             '!' => {
                 self.bump();
@@ -389,7 +412,7 @@ impl Scanner {
             _ => {
                 let pos = self.pos;
                 self.bump();
-                return Err(ScanError::UnknownCharacter { pos });
+                return Err(Diag::UnknownCharacter { pos });
             }
         };
 
@@ -403,13 +426,40 @@ impl Scanner {
     }
 }
 
+fn is_ident_body(c: Option<char>) -> bool {
+    c.map_or(false, |c| match c {
+        'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => true,
+        _ => false,
+    })
+}
+
 fn is_whitespace(c: Option<char>) -> bool {
     c.map_or(false, |c| c.is_whitespace())
 }
 
+pub struct WordStream<'a> {
+    pub scanner: Scanner,
+    handler: &'a errors::Handler,
+}
+
+impl<'a> WordStream<'a> {
+    pub fn new(scanner: Scanner, handler: &'a errors::Handler) -> WordStream {
+        WordStream { scanner, handler }
+    }
+
+    pub fn next(&mut self) -> Word {
+        match self.scanner.next_word() {
+            Ok(word) => return word,
+            Err(diag) => self.handler.report(diag),
+        };
+        self.next()
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::{BytePos, Category, Delim, ScanError, Scanner, SourceFile, Word};
+    use super::{Category, Diag, Scanner, Word};
+    use source_map::{BytePos, SourceFile, Span};
     use std::rc::Rc;
 
     fn create_scanner(src: &str) -> (Scanner, Rc<SourceFile>) {
@@ -419,26 +469,14 @@ mod test {
     }
 
     #[test]
-    fn scan_punctuators_test() {
+    fn test_scan_punctuators() {
         let (mut sc, _) =
             create_scanner("( ) { } != ! == = >= > <= < * / + - , : ;");
 
-        assert_eq!(
-            Category::OpenDelim(Delim::Paren),
-            sc.next_word().unwrap().category
-        );
-        assert_eq!(
-            Category::CloseDelim(Delim::Paren),
-            sc.next_word().unwrap().category
-        );
-        assert_eq!(
-            Category::OpenDelim(Delim::Curly),
-            sc.next_word().unwrap().category
-        );
-        assert_eq!(
-            Category::CloseDelim(Delim::Curly),
-            sc.next_word().unwrap().category
-        );
+        assert_eq!(Category::OpenParen, sc.next_word().unwrap().category);
+        assert_eq!(Category::CloseParen, sc.next_word().unwrap().category);
+        assert_eq!(Category::OpenCurly, sc.next_word().unwrap().category);
+        assert_eq!(Category::CloseCurly, sc.next_word().unwrap().category);
         assert_eq!(Category::Ne, sc.next_word().unwrap().category);
         assert_eq!(Category::Not, sc.next_word().unwrap().category);
         assert_eq!(Category::EqEq, sc.next_word().unwrap().category);
@@ -458,7 +496,7 @@ mod test {
     }
 
     #[test]
-    fn scan_identifiers_test() {
+    fn test_scan_identifiers() {
         let (mut sc, sf) = create_scanner("a abc abc123 123abc _a_");
 
         let Word { category, lexeme } = sc.next_word().unwrap();
@@ -473,13 +511,15 @@ mod test {
         assert_eq!(Category::Ident, category);
         assert_eq!("abc123", sf.span_to_snippet(lexeme));
 
-        let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
-        assert_eq!("123", sf.span_to_snippet(lexeme));
-
-        let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Ident, category);
-        assert_eq!("abc", sf.span_to_snippet(lexeme));
+        assert_eq!(
+            Err(Diag::InvalidDigit {
+                invalid_span: Span {
+                    start: BytePos(16),
+                    end: BytePos(19),
+                },
+            }),
+            sc.next_word()
+        );
 
         let Word { category, lexeme } = sc.next_word().unwrap();
         assert_eq!(Category::Ident, category);
@@ -490,7 +530,7 @@ mod test {
     }
 
     #[test]
-    fn scan_keywords_test() {
+    fn test_scan_keywords() {
         let (mut sc, sf) = create_scanner(
             "program let int bool float str read readln write writeln if else \
              while whileif",
@@ -557,7 +597,7 @@ mod test {
     }
 
     #[test]
-    fn scan_string_literals_test() {
+    fn test_scan_string_literals() {
         let (mut sc, sf) = create_scanner("\"\" \"foo bar 123 !!!\"");
 
         let Word { category, lexeme } = sc.next_word().unwrap();
@@ -573,12 +613,12 @@ mod test {
     }
 
     #[test]
-    fn nonterminating_string_literal_test() {
+    fn test_nonterminating_string_literal() {
         let (mut sc, _) = create_scanner("\"abc");
 
         let word = sc.next_word();
         assert!(match word {
-            Err(ScanError::MissingTerminatingStringMark {
+            Err(Diag::MissingTerminatingStringMark {
                 str_start_pos: BytePos(0),
                 eol_pos: BytePos(4),
             }) => true,
@@ -590,14 +630,14 @@ mod test {
     }
 
     #[test]
-    fn invalid_newline_in_string_literal_test() {
+    fn test_invalid_newline_in_string_literal() {
         let (mut sc, _) = create_scanner("\"abc\n\"");
 
         // Scans the first string.
         let word = sc.next_word();
 
         assert!(match word {
-            Err(ScanError::MissingTerminatingStringMark {
+            Err(Diag::MissingTerminatingStringMark {
                 str_start_pos: BytePos(0),
                 eol_pos: BytePos(4),
             }) => true,
@@ -613,48 +653,48 @@ mod test {
     }
 
     #[test]
-    fn scan_numbers_test() {
+    fn test_scan_numbers() {
         let (mut sc, sf) =
             create_scanner("0 0123 3.14 3.14e42 0e0 0E0 0e+0 0e-0 0E+0 0E-0");
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: false }, category);
         assert_eq!("0", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: false }, category);
         assert_eq!("0123", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("3.14", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("3.14e42", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("0e0", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("0E0", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("0e+0", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("0e-0", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("0E+0", sf.span_to_snippet(lexeme));
 
         let Word { category, lexeme } = sc.next_word().unwrap();
-        assert_eq!(Category::Num, category);
+        assert_eq!(Category::NumConst { is_float: true }, category);
         assert_eq!("0E-0", sf.span_to_snippet(lexeme));
 
         let Word { category, .. } = sc.next_word().unwrap();
@@ -662,12 +702,12 @@ mod test {
     }
 
     #[test]
-    fn missing_exponent_digits_test() {
+    fn test_missing_exponent_digits() {
         let (mut sc, _) = create_scanner("0e");
 
         let word = sc.next_word();
         assert!(match word {
-            Err(ScanError::MissingExponentDigits {
+            Err(Diag::MissingExponentDigits {
                 exp_pos: BytePos(1),
             }) => true,
             _ => false,
