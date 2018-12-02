@@ -2,87 +2,83 @@
 
 [![Build Status](https://travis-ci.com/feroldi/blaise.svg?token=FjPQjKrsmeJzM46SGssn&branch=master)](https://travis-ci.com/feroldi/blaise)
 
-Blaise é o nome do projeto da disciplina de compiladores.
+Blaise is my university's compilers class project.
+The name is inspired on the mathematician Blaise Pascal's first name, given the language chosen to be compiled by Blaise is a modification of Pascal's syntax grammar.
 
-## Gramática
+## Building
+
+Blaise is written in Rust, so you may use its package manager, `cargo`, to build and run it:
+
+    cargo build
+    cargo test
+    cargo run <some source file>
+
+## Syntax grammar
 
 ```ebnf
-<programa> ::= "program" <id> ";" { <declaração> } <lista-comando>
+<program> ::= "program" <ident> ";" { <decl> } <stmt-list>
 
-<declaração> ::= "let" <id> ":" <tipo> ";"
+<decl> ::= "let" <ident> ":" <type> ";"
 
-<tipo> ::= "int" | "bool" | "float" | "str"
+<type> ::= "int" | "bool" | "float" | "str"
 
-<lista-comando> ::= <commando> ";" { <commando> ";" }
+<stmt-list> ::= <stmt> { <stmt> }
 
-<comando> ::= <atribuição>
-            | <leitura>
-            | <escrita>
-            | <composto>
-            | <condicional>
-            | <repetição>
+<stmt> ::= <assign-stmt>
+         | <func-call-stmt>
+         | <block-stmt>
+         | <sel-stmt>
+         | <iter-stmt>
 
-<lista-parâmetro> ::= <id> { "," <id> }
+<param-list> ::= [<expr> { "," <expr> }]
 
-<lista-expressão> ::= <expressão> { "," <expressão> }
+<assign-stmt> ::= <ident> "=" <expr> ";"
 
-<atribuição> ::= <id> "=" <expressão> ";"
+<func-call-stmt> ::= <ident> "(" <param-list> ")" ";"
 
-<leitura> ::= "read" "(" <lista-parâmetro> ")" ";"
-            | "readln" "(" <lista-parâmetro> ")" ";"
+<block-stmt> ::= "{" <stmt-list> "}"
 
-<escrita> ::= "write" "(" <lista-expressão> ")" ";"
-            | "writeln" "(" <lista-expressão> ")" ";"
+<sel-stmt> ::= "if" <expr> <block-stmt> ["else" <block-stmt>]
 
-<composto> ::= "{" <lista-comando> "}"
+<iter-stmt> ::= "while" <expr> <block-stmt>
 
-<condicional> ::= "if" <expressão> <composto> ["else" <composto>]
+<add-expr> ::= <add-expr> "+" <mult-expr>
+             | <add-expr> "–" <mult-expr>
+             | "–" <add-expr>
+             | <mult-expr>
 
-<repetição> ::= "while" <expressão> <composto>
+<mult-expr> ::= <mult-expr> "*" <eguality-expr>
+              | <mult-expr> "/" <eq-expr>
+              | <eq-expr>
 
-<expressão> ::=  <expressão> "+" <termo>
-               | <expressão> "–" <termo>
-               | <termo>
+<eq-expr> ::= <eq-expr> "==" <rel-expr>
+            | <eq-expr> "!=" <rel-expr>
+            | <relacional-expr>
 
-<termo> ::= <termo> "*" <igualdade>
-          | <termo> "/" <igualdade>
-          | <igualdade>
+<rel-expr> ::= <rel-expr> "<" <expr>
+             | <rel-expr> "<=" <expr>
+             | <rel-expr> ">" <expr>
+             | <rel-expr> ">=" <expr>
+             | <expr>
 
-<igualdade> ::= <igualdade> "==" <relacional>
-              | <igualdade> "!=" <relacional>
-              | <relacional>
+<expr> ::= <num-const>
+         | <ident>
+         | <str-lit>
+         | "(" <expr> ")"
 
-<relacional> ::= <relacional> "<" <fator>
-               | <relacional> "<=" <fator>
-               | <relacional> ">" <fator>
-               | <relacional> ">=" <fator>
-               | <fator>
 
-<fator> ::= <num>
-          | <id>
-          | <string>
-          | "(" <expressão> ")"
-
-<num> ::= <inteiro> | <fracionário>
+<num-const> ::= <int-const>
+              | <float-const>
 ```
 
-## Regex
+## Regular exprs
 
 ```
-<string> ::= "[^"]*"
+<str-lit> ::= "[^"]*"
 
-<id> ::= [a-zA-Z_][a-zA-Z0-9_]*
+<ident> ::= [a-zA-Z_][a-zA-Z0-9_]*
 
-<inteiro> ::= 0|([1-9][0-9]*)
+<int-const> ::= 0|([1-9][0-9]*)
 
-<fracionário> ::= [0-9]+\.[0-9]+([Ee][+-]?[0-9]+)?
-```
-
-## Alfabeto
-
-```
-0 1 2 3 4 5 6 7 8 9
-a b c d e f g h i j k l m n o p q r s t u v w x y z
-A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
-{ } ( ) > < = ! " + - * / , ; :
+<float-const> ::= [0-9]+\.[0-9]+([Ee][+-]?[0-9]+)?
 ```
