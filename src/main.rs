@@ -19,7 +19,7 @@ fn main() {
     let mut args = env::args();
     args.next();
     let path = args.next().unwrap();
-    let src = fs::read_string(path).unwrap();
+    let src = fs::read_to_string(path).unwrap();
     let file = Rc::new(SourceFile::new("test".into(), src.into()));
     let scanner = Scanner::new(file.clone());
     let handler = errors::Handler::with_emitter(move |diag| {
