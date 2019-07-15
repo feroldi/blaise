@@ -52,7 +52,7 @@ impl<'a> Parser<'a> {
     pub fn parse_program(&mut self) -> Result<ast::Program> {
         self.expect_and_consume(Category::Program)?;
         let prog_name = self.parse_ident()?;
-        self.expect_and_consume(Category::Semi);
+        self.expect_and_consume(Category::Semi)?;
 
         let mut decls = vec![];
         let mut stmts = vec![];
@@ -351,7 +351,7 @@ mod test {
     use ast;
     use errors;
     use scanner::{Category, Scanner, Word, WordStream};
-    use source_map::SourceFile;
+    use source_map::{BytePos, SourceFile, Span};
     use std::rc::Rc;
 
     fn create_parser<'a>(src: &str, handler: &'a errors::Handler) -> Parser<'a> {
@@ -599,5 +599,24 @@ mod test {
         };
 
         assert_eq!(Ok(prog), parser.parse_program());
+    }
+
+    #[test]
+    fn test_parse_program_missing_semi() {
+        let handler = errors::Handler::with_ignoring_emitter();
+        let mut parser = create_parser("program a let i: int; i = 42;", &handler);
+
+        let diag = errors::Diag::ExpectedWord {
+            expected: Category::Semi,
+            got: Word {
+                category: Category::Let,
+                lexeme: Span {
+                    start: BytePos(10),
+                    end: BytePos(13),
+                },
+            },
+        };
+
+        assert_eq!(Err(diag), parser.parse_program());
     }
 }
