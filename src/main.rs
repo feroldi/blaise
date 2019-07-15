@@ -1,10 +1,3 @@
-#![feature(
-    universal_impl_trait,
-    dotdoteq_in_patterns,
-    use_nested_groups,
-    fs_read_write
-)]
-
 use std::env;
 use std::fs;
 use std::rc::Rc;
