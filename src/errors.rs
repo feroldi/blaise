@@ -42,8 +42,14 @@ impl Diag {
             Diag::MissingExponentDigits { exp_pos } => exp_pos,
             Diag::MissingTerminatingStringMark { str_start_pos, .. } => str_start_pos,
             Diag::UnknownCharacter { pos } => pos,
-            Diag::ExpectedWord { got: Word { lexeme, .. }, .. } => lexeme.start,
-            Diag::ExpectedOneOf { got: Word { lexeme, .. }, .. } => lexeme.start,
+            Diag::ExpectedWord {
+                got: Word { lexeme, .. },
+                ..
+            } => lexeme.start,
+            Diag::ExpectedOneOf {
+                got: Word { lexeme, .. },
+                ..
+            } => lexeme.start,
             _ => DUMMY_BPOS,
         }
     }
@@ -82,10 +88,9 @@ impl fmt::Display for Diag {
             Diag::MissingExponentDigits { .. } => {
                 write!(f, "missing exponent digits for decimal literal")
             }
-            Diag::MissingTerminatingStringMark { .. } => write!(
-                f,
-                "missing terminating quotation mark for string literal"
-            ),
+            Diag::MissingTerminatingStringMark { .. } => {
+                write!(f, "missing terminating quotation mark for string literal")
+            }
             Diag::UnknownCharacter { .. } => write!(f, "unknown character"),
             Diag::UnexpectedEndOfFile => write!(f, "unexpected end of file"),
             Diag::ExpectedWord { expected, got } => {
@@ -97,11 +102,7 @@ impl fmt::Display for Diag {
                     .map(|c| c.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                write!(
-                    f,
-                    "expected one of {}, but got {}",
-                    one_of, got.category
-                )
+                write!(f, "expected one of {}, but got {}", one_of, got.category)
             }
         }
     }

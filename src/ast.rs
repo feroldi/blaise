@@ -77,4 +77,3 @@ pub struct Program {
     pub decls: Vec<Decl>,
     pub stmts: Vec<Stmt>,
 }
-

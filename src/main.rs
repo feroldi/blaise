@@ -1,5 +1,9 @@
-#![feature(universal_impl_trait, dotdoteq_in_patterns, use_nested_groups,
-           fs_read_write)]
+#![feature(
+    universal_impl_trait,
+    dotdoteq_in_patterns,
+    use_nested_groups,
+    fs_read_write
+)]
 
 use std::env;
 use std::fs;
@@ -11,8 +15,8 @@ use source_map::{Loc, SourceFile};
 
 pub mod ast;
 pub mod errors;
-pub mod scanner;
 pub mod parser;
+pub mod scanner;
 pub mod source_map;
 
 fn main() {
@@ -23,8 +27,7 @@ fn main() {
     let file = Rc::new(SourceFile::new("test".into(), src.into()));
     let scanner = Scanner::new(file.clone());
     let handler = errors::Handler::with_emitter(move |diag| {
-        let Loc { line, col } =
-            file.lookup_source_location(diag.location()).unwrap();
+        let Loc { line, col } = file.lookup_source_location(diag.location()).unwrap();
         println!("{}:{}: error: {}", line, col.0, diag);
         true
     });

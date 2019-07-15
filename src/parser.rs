@@ -27,10 +27,7 @@ impl<'a> Parser<'a> {
 
     fn is_start_of_statement(&self) -> bool {
         match self.peek_word.category {
-            Category::Ident
-            | Category::If
-            | Category::While
-            | Category::OpenCurly => true,
+            Category::Ident | Category::If | Category::While | Category::OpenCurly => true,
             _ => false,
         }
     }
@@ -270,13 +267,13 @@ impl<'a> Parser<'a> {
                 Ok(Expr::Paren(Box::new(expr)))
             }
             Category::StrLit => {
-                let str_data =
-                    self.get_peek_lexeme().trim_matches('"').to_owned();
+                let str_data = self.get_peek_lexeme().trim_matches('"').to_owned();
                 self.consume();
                 Ok(Expr::Lit(Lit::StrLit(str_data)))
             }
             Category::NumConst { is_float: false } => {
-                let value = self.get_peek_lexeme()
+                let value = self
+                    .get_peek_lexeme()
                     .chars()
                     .flat_map(|c| c.to_digit(10))
                     .fold(0u64, |acc, val| acc * 10 + val as u64);
@@ -328,10 +325,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_one_of_and_consume(
-        &mut self,
-        categories: &[Category],
-    ) -> Result<Word> {
+    fn expect_one_of_and_consume(&mut self, categories: &[Category]) -> Result<Word> {
         if categories.contains(&self.peek_word.category) {
             Ok(self.consume())
         } else {
@@ -360,10 +354,7 @@ mod test {
     use source_map::SourceFile;
     use std::rc::Rc;
 
-    fn create_parser<'a>(
-        src: &str,
-        handler: &'a errors::Handler,
-    ) -> Parser<'a> {
+    fn create_parser<'a>(src: &str, handler: &'a errors::Handler) -> Parser<'a> {
         let file = Rc::new(SourceFile::new("test".into(), src.into()));
         let scanner = Scanner::new(file);
         let word_stream = WordStream::new(scanner, handler);
@@ -396,10 +387,7 @@ mod test {
     fn test_parse_num_const() {
         let handler = errors::Handler::with_ignoring_emitter();
         let mut parser = create_parser("0 123 3.14 42e3", &handler);
-        assert_eq!(
-            Ok(ast::Expr::Lit(ast::Lit::IntLit(0))),
-            parser.parse_expr()
-        );
+        assert_eq!(Ok(ast::Expr::Lit(ast::Lit::IntLit(0))), parser.parse_expr());
         assert_eq!(
             Ok(ast::Expr::Lit(ast::Lit::IntLit(123))),
             parser.parse_expr()
@@ -475,11 +463,7 @@ mod test {
     fn test_parse_relational_expr() {
         let handler = errors::Handler::with_ignoring_emitter();
         let mut parser = create_parser("0 < 0", &handler);
-        let expr = ast::Expr::BinaryOp(
-            ast::BinOp::Lt,
-            Box::new(mk_int(0)),
-            Box::new(mk_int(0)),
-        );
+        let expr = ast::Expr::BinaryOp(ast::BinOp::Lt, Box::new(mk_int(0)), Box::new(mk_int(0)));
         assert_eq!(Ok(expr), parser.parse_expr());
     }
 
@@ -487,11 +471,7 @@ mod test {
     fn test_parse_equality_expr() {
         let handler = errors::Handler::with_ignoring_emitter();
         let mut parser = create_parser("0 == 0", &handler);
-        let expr = ast::Expr::BinaryOp(
-            ast::BinOp::Eq,
-            Box::new(mk_int(0)),
-            Box::new(mk_int(0)),
-        );
+        let expr = ast::Expr::BinaryOp(ast::BinOp::Eq, Box::new(mk_int(0)), Box::new(mk_int(0)));
         assert_eq!(Ok(expr), parser.parse_expr());
     }
 
@@ -499,11 +479,7 @@ mod test {
     fn test_parse_term() {
         let handler = errors::Handler::with_ignoring_emitter();
         let mut parser = create_parser("0 * 0", &handler);
-        let expr = ast::Expr::BinaryOp(
-            ast::BinOp::Mult,
-            Box::new(mk_int(0)),
-            Box::new(mk_int(0)),
-        );
+        let expr = ast::Expr::BinaryOp(ast::BinOp::Mult, Box::new(mk_int(0)), Box::new(mk_int(0)));
         assert_eq!(Ok(expr), parser.parse_expr());
     }
 
@@ -511,37 +487,28 @@ mod test {
     fn test_parse_additive() {
         let handler = errors::Handler::with_ignoring_emitter();
         let mut parser = create_parser("0 + 0", &handler);
-        let expr = ast::Expr::BinaryOp(
-            ast::BinOp::Add,
-            Box::new(mk_int(0)),
-            Box::new(mk_int(0)),
-        );
+        let expr = ast::Expr::BinaryOp(ast::BinOp::Add, Box::new(mk_int(0)), Box::new(mk_int(0)));
         assert_eq!(Ok(expr), parser.parse_expr());
     }
 
     #[test]
     fn test_parse_selection() {
         let handler = errors::Handler::with_ignoring_emitter();
-        let mut parser =
-            create_parser("if 1 { x = 0; } else { x = 1; }", &handler);
+        let mut parser = create_parser("if 1 { x = 0; } else { x = 1; }", &handler);
 
         let stmt = ast::Stmt::If(
             mk_int(1),
             Box::new(ast::Block {
-                stmts: vec![
-                    ast::Stmt::Assign(
-                        ast::Ident { name: ast::Name(0) },
-                        mk_int(0),
-                    ),
-                ],
+                stmts: vec![ast::Stmt::Assign(
+                    ast::Ident { name: ast::Name(0) },
+                    mk_int(0),
+                )],
             }),
             Some(Box::new(ast::Block {
-                stmts: vec![
-                    ast::Stmt::Assign(
-                        ast::Ident { name: ast::Name(0) },
-                        mk_int(1),
-                    ),
-                ],
+                stmts: vec![ast::Stmt::Assign(
+                    ast::Ident { name: ast::Name(0) },
+                    mk_int(1),
+                )],
             })),
         );
 
@@ -556,12 +523,10 @@ mod test {
         let stmt = ast::Stmt::If(
             mk_int(1),
             Box::new(ast::Block {
-                stmts: vec![
-                    ast::Stmt::Assign(
-                        ast::Ident { name: ast::Name(0) },
-                        mk_int(0),
-                    ),
-                ],
+                stmts: vec![ast::Stmt::Assign(
+                    ast::Ident { name: ast::Name(0) },
+                    mk_int(0),
+                )],
             }),
             None,
         );
@@ -577,12 +542,10 @@ mod test {
         let stmt = ast::Stmt::While(
             mk_int(1),
             Box::new(ast::Block {
-                stmts: vec![
-                    ast::Stmt::Assign(
-                        ast::Ident { name: ast::Name(0) },
-                        mk_int(0),
-                    ),
-                ],
+                stmts: vec![ast::Stmt::Assign(
+                    ast::Ident { name: ast::Name(0) },
+                    mk_int(0),
+                )],
             }),
         );
 
@@ -621,23 +584,18 @@ mod test {
     #[test]
     fn test_parse_program() {
         let handler = errors::Handler::with_ignoring_emitter();
-        let mut parser =
-            create_parser("program a; let i: int; i = 42;", &handler);
+        let mut parser = create_parser("program a; let i: int; i = 42;", &handler);
 
         let prog = ast::Program {
             name: ast::Ident { name: ast::Name(0) },
-            decls: vec![
-                ast::Decl {
-                    ident: ast::Ident { name: ast::Name(1) },
-                    ty: ast::Ty::IntTy,
-                },
-            ],
-            stmts: vec![
-                ast::Stmt::Assign(
-                    ast::Ident { name: ast::Name(1) },
-                    mk_int(42),
-                ),
-            ],
+            decls: vec![ast::Decl {
+                ident: ast::Ident { name: ast::Name(1) },
+                ty: ast::Ty::IntTy,
+            }],
+            stmts: vec![ast::Stmt::Assign(
+                ast::Ident { name: ast::Name(1) },
+                mk_int(42),
+            )],
         };
 
         assert_eq!(Ok(prog), parser.parse_program());

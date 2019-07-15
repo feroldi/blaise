@@ -75,12 +75,8 @@ impl fmt::Display for Category {
                 Category::Else => "`else`",
                 Category::While => "`while`",
                 Category::Ident => "identifier",
-                Category::NumConst { is_float: false } => {
-                    "numeric integer constant"
-                }
-                Category::NumConst { is_float: true } => {
-                    "numeric floating point constant"
-                }
+                Category::NumConst { is_float: false } => "numeric integer constant",
+                Category::NumConst { is_float: true } => "numeric floating point constant",
                 Category::StrLit => "string literal",
                 Category::Eof => "`<end of file>`",
             }
@@ -458,8 +454,7 @@ mod test {
 
     #[test]
     fn test_scan_punctuators() {
-        let (mut sc, _) =
-            create_scanner("( ) { } != ! == = >= > <= < * / + - , : ;");
+        let (mut sc, _) = create_scanner("( ) { } != ! == = >= > <= < * / + - , : ;");
 
         assert_eq!(Category::OpenParen, sc.next_word().unwrap().category);
         assert_eq!(Category::CloseParen, sc.next_word().unwrap().category);
@@ -519,9 +514,7 @@ mod test {
 
     #[test]
     fn test_scan_keywords() {
-        let (mut sc, sf) = create_scanner(
-            "program let int bool float str if else while whileif",
-        );
+        let (mut sc, sf) = create_scanner("program let int bool float str if else while whileif");
 
         let Word { category, lexeme } = sc.next_word().unwrap();
         assert_eq!(Category::Program, category);
@@ -625,8 +618,7 @@ mod test {
 
     #[test]
     fn test_scan_numbers() {
-        let (mut sc, sf) =
-            create_scanner("0 0123 3.14 3.14e42 0e0 0E0 0e+0 0e-0 0E+0 0E-0");
+        let (mut sc, sf) = create_scanner("0 0123 3.14 3.14e42 0e0 0E0 0e+0 0e-0 0E+0 0E-0");
 
         let Word { category, lexeme } = sc.next_word().unwrap();
         assert_eq!(Category::NumConst { is_float: false }, category);
