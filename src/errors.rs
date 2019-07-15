@@ -56,7 +56,7 @@ impl Diag {
 }
 
 pub struct Handler {
-    emitter: Box<Fn(Diag) -> bool>,
+    emitter: Box<dyn Fn(Diag) -> bool>,
 }
 
 impl Handler {
