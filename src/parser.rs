@@ -63,7 +63,6 @@ impl<'a> Parser<'a> {
 
         while self.is_start_of_statement() {
             stmts.push(self.parse_command()?);
-            self.expect_and_consume(Category::Semi)?;
         }
 
         Ok(ast::Program {
@@ -105,10 +104,8 @@ impl<'a> Parser<'a> {
     fn parse_block(&mut self) -> Result<ast::Block> {
         self.expect_and_consume(Category::OpenCurly)?;
         let mut commands = vec![self.parse_command()?];
-        self.expect_and_consume(Category::Semi)?;
         while self.is_start_of_statement() {
             commands.push(self.parse_command()?);
-            self.expect_and_consume(Category::Semi)?;
         }
         self.expect_and_consume(Category::CloseCurly)?;
         Ok(ast::Block { stmts: commands })
@@ -125,6 +122,7 @@ impl<'a> Parser<'a> {
             self.expect_and_consume(Category::Comma)?;
         }
         self.expect_and_consume(Category::CloseParen)?;
+        self.expect_and_consume(Category::Semi)?;
         Ok(ast::Stmt::Call(func_id, args))
     }
 
@@ -136,6 +134,7 @@ impl<'a> Parser<'a> {
         }
         self.expect_and_consume(Category::Eq)?;
         let expr = self.parse_expr()?;
+        self.expect_and_consume(Category::Semi)?;
         Ok(ast::Stmt::Assign(ident, expr))
     }
 
